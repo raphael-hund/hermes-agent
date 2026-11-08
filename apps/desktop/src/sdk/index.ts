@@ -1686,6 +1686,8 @@ export { composerInputBacking, composerSurfaceRing } from '@/components/chat/com
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'
+/** The small Hermes ghost with orbits — the sidebar-scale brand mark. */
+export { HermesMark } from '@/components/hermes-mark'
 /** Pane placement roles. `'floating'` is the one NON-tiling value: the pane is
  *  excluded from the layout tree and rendered as a fixed, draggable card above
  *  it — it takes no width from any zone, has no tab, and can't be docked.

@@ -441,7 +441,53 @@ export const slateTheme: DesktopTheme = {
   }
 }
 
+/**
+ * Focus — the calm three-column workspace. Neutral graphite, no hue in the
+ * chrome; color lives only in profile avatars and the brand mark's orbits.
+ * Dark-first: the light variant is synthesized like every dark-only skin.
+ * Surface steps (chat #202020, side columns #222222, active row ≈ #2c2c2c)
+ * are pinned in styles.css under `[data-hermes-theme='focus']`, because the
+ * generic chrome mix would pull them toward near-black.
+ */
+export const focusTheme: DesktopTheme = {
+  name: 'focus',
+  label: 'Focus',
+  description: 'Calm graphite workspace, color only where it means something',
+  colors: {
+    background: '#202020',
+    foreground: '#ececec',
+    card: '#262626',
+    cardForeground: '#ececec',
+    muted: '#2a2a2a',
+    mutedForeground: '#8f8f8f',
+    popover: '#272727',
+    popoverForeground: '#ececec',
+    primary: '#ececec',
+    primaryForeground: '#1a1a1a',
+    secondary: '#2c2c2c',
+    secondaryForeground: '#d6d6d6',
+    accent: '#2c2c2c',
+    accentForeground: '#e2e2e2',
+    border: '#2e2e2e',
+    input: '#2e2e2e',
+    ring: '#a6a6a6',
+    midground: '#bdbdbd',
+    composerRing: '#5a5a5a',
+    destructive: '#d0575b',
+    destructiveForeground: '#fff5f5',
+    sidebarBackground: '#222222',
+    sidebarBorder: '#2a2a2a',
+    userBubble: '#2c2c2c',
+    userBubbleBorder: '#363636'
+  },
+  typography: {
+    fontSans: SYSTEM_SANS,
+    fontMono: SYSTEM_MONO
+  }
+}
+
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
+  focus: focusTheme,
   nous: nousTheme,
   github: githubTheme,
   catppuccin: catppuccinTheme,
@@ -459,7 +505,7 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'nous'
+export const DEFAULT_SKIN_NAME = 'focus'
 
 /** Names that no longer resolve to a skin of their own. A stored pick of one
  *  falls back to DEFAULT_SKIN_NAME, and a cached backend theme under one is

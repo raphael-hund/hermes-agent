@@ -540,6 +540,8 @@
     --file-tree-row-height: 1.375rem;
 
     --composer-width: 100%;
+    /* The composer shell's corner. Skins may round it further (Focus: a pill). */
+    --composer-radius: var(--radius-2xl);
     --composer-control-size: 1.5rem;
     --composer-control-primary-size: 1.625rem;
     --composer-voice-menu-size: 1.25rem;
@@ -4266,4 +4268,66 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
 .aui-error-details .aui-error-details-link:hover {
   background: none;
   color: var(--err-ink);
+}
+
+/* ── Focus skin ───────────────────────────────────────────────────────────
+   The calm three-column workspace. The generic chrome mix pulls every skin
+   toward near-black; Focus pins its three surface steps instead so the side
+   columns, chat and active row keep the exact contrast the design asks for.
+   Everything here is token overrides plus two structural refinements (pill
+   composer, sentence-case tabs) — components keep reading the same names. */
+:root[data-hermes-theme='focus'].dark {
+  --focus-surface-chat: #202020;
+  --focus-surface-side: #222222;
+  --focus-row-active: #2c2c2c;
+  --focus-row-hover: #272727;
+  --focus-hairline: #2a2a2a;
+
+  --ui-bg-chrome: var(--focus-surface-chat);
+  --ui-bg-sidebar: var(--focus-surface-side);
+  --ui-bg-editor: #262626;
+  --ui-bg-elevated: #272727;
+  --ui-row-hover-background: var(--focus-row-hover);
+  --ui-row-active-background: var(--focus-row-active);
+  --ui-control-hover-background: color-mix(in srgb, #ffffff 5%, transparent);
+  --ui-control-active-background: color-mix(in srgb, #ffffff 7%, transparent);
+  --ui-stroke-secondary: color-mix(in srgb, #ffffff 7%, transparent);
+  --ui-stroke-tertiary: color-mix(in srgb, #ffffff 5%, transparent);
+  --ui-stroke-quaternary: color-mix(in srgb, #ffffff 3%, transparent);
+  --sidebar-edge-border: var(--focus-hairline);
+  --ui-chat-bubble-background: var(--focus-row-active);
+  --ui-widget-surface-background: #262626;
+  --chat-unfocused-opacity: 0.82;
+}
+
+:root[data-hermes-theme='focus'] {
+  /* Pill composer: one round row, never a boxed card. */
+  --composer-radius: 1.375rem;
+  --composer-surface-pad-x: 0.625rem;
+  --composer-surface-pad-y: 0.375rem;
+  /* Chat reads at 14–15px; the chrome stays at 13px. */
+  --conversation-text-base-size: 0.875rem;
+  --conversation-base-line-height: 1.4rem;
+  --conversation-turn-gap: 0.5rem;
+  --turn-block-gap: 0.875rem;
+}
+
+:root[data-hermes-theme='focus'] [data-slot='composer-surface'] {
+  border-color: var(--ui-stroke-secondary) !important;
+  background: var(--ui-bg-editor);
+}
+
+:root[data-hermes-theme='focus'] [data-slot='composer-surface']:has([data-slot='composer-rich-input']:focus-visible) {
+  border-color: var(--dt-composer-ring) !important;
+}
+
+/* No gradient wash behind the pill: the chat surface is already flat. */
+:root[data-hermes-theme='focus'] [data-slot='composer-root'] > .pointer-events-none {
+  background: none !important;
+}
+
+/* Tabs read as names, not shouted labels. */
+:root[data-hermes-theme='focus'] [data-slot='pane-tab-label'] {
+  text-transform: none;
+  letter-spacing: 0;
 }
