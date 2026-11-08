@@ -472,7 +472,7 @@ export default {
       // zone's tab strip, so the pane stays reachable while collapsed.
       data: {
         placement: 'left',
-        width: '260px',
+        width: '250px',
         collapsible: true,
         hideOnly: true,
         tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
@@ -520,7 +520,7 @@ export default {
           // arrives as the right edge's vertical tab and takes no width off the
           // chat until the user opens it.
           defaultCollapsed: true,
-          width: '250px'
+          width: '240px'
         },
         render: () => <RoutinesPane />
       })
@@ -613,6 +613,8 @@ export default {
       })
 
       const stopGroupSync = $groupChatWorkspace.listen(syncRoutinesPane)
+      // The first roster answer seats a selection; the jobs column follows it.
+      const stopSelectionSync = $selectedRosterKey.listen(syncRoutinesPane)
 
       // React on the NEXT tick — a layout notification arrives mid-mutation,
       // and registering/unregistering panes from inside it would re-enter the
@@ -717,6 +719,7 @@ export default {
         ctx.onDispose(() => {
           stopSidebarSync()
           stopGroupSync()
+          stopSelectionSync()
           stopFocusSync?.()
           stopReclaimSync?.()
         })

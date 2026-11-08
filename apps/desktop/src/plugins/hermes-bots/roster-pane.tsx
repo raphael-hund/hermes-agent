@@ -164,12 +164,17 @@ export function sessionOwnsWorkspace(): boolean {
   return active === undefined ? $botChatFocused.get() : Boolean(active)
 }
 
-/** A real bot chat owns the center. Cronjobs are BOT-scoped, so this — not
- *  mere Bot Mode visibility — is what may seat the Cronjobs tile: beside a
- *  group chat it would describe whichever profile the socket happens to be
- *  homed on. */
+/** A bot owns the center: its chat is open, a session holds focus, or a
+ *  profile row is selected (the calm workspace shows that profile's jobs from
+ *  the first frame, before any chat is opened). Cronjobs are BOT-scoped, so a
+ *  group chat never qualifies — beside a room the tile would describe
+ *  whichever profile the socket happens to be homed on. */
 export function botChatOwnsWorkspace(): boolean {
-  return $botsPaneVisible.get() && !$groupChatWorkspace.get() && Boolean($openBotChat.get() || sessionOwnsWorkspace())
+  return (
+    $botsPaneVisible.get() &&
+    !$groupChatWorkspace.get() &&
+    Boolean($openBotChat.get() || sessionOwnsWorkspace() || $selectedRosterKey.get())
+  )
 }
 
 /** An opened bot chat stops owning the center once focus leaves it (closed,

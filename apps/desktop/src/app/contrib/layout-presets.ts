@@ -1,5 +1,6 @@
 import { group, mirrorTreeHorizontal, split } from '@/components/pane-shell/tree/model'
-import { registerBundledPresets } from '@/components/pane-shell/tree/presets'
+import { applyLayoutPreset, registerBundledPresets } from '@/components/pane-shell/tree/presets'
+import { readKey, writeKey } from '@/lib/storage'
 
 // ---------------------------------------------------------------------------
 // Layout presets — CHAT (main) always dominates.
@@ -96,10 +97,53 @@ const QUAD_TREE = split(
   [3, 1]
 )
 
+// The calm workspace: profiles left (the Bots roster fronted over Sessions in
+// one zone, so ordinary chats stay one tab away), the chat in the middle, and
+// the selected profile's scheduled jobs on the right. Tooling keeps its slots
+// but RESTS: the terminal is a closed rail under the chat, review/files a
+// closed outer column, so ⌃` / ⌘J / ⌘G still open them in place. The jobs pane
+// is plugin-registered and only present while Bot Mode is on screen; an
+// unregistered pane simply leaves the grid, so this tree is safe without it.
+export const BOTS_PANE_ID = 'hermes-bots:pane'
+export const ROUTINES_PANE_ID = 'hermes-bots:routines'
+export const FOCUS_WORKSPACE_ID = 'focus-workspace'
+
+export const FOCUS_WORKSPACE_TREE = split(
+  'row',
+  [
+    group(['sessions', BOTS_PANE_ID], { active: BOTS_PANE_ID, id: 'grp-sessions' }),
+    // The jobs zone sits beside the chat in the chat's own column, exactly
+    // where its enforced dock (`workspace`, right) re-homes it — so enabling
+    // Bot Mode never reshapes this tree on boot.
+    split(
+      'column',
+      [
+        split('row', [group(['workspace'], { id: 'grp-main' }), group([ROUTINES_PANE_ID], { id: 'grp-routines' })], [
+          3.4, 1
+        ]),
+        group(['terminal'], { id: 'grp-terminal' })
+      ],
+      [3, 1]
+    ),
+    split('row', [group(['review'], { id: 'grp-review' }), group(['files'], { id: 'grp-files' })], [1, 1.2])
+  ],
+  [1, 4.4, 1.25],
+  'spl-root'
+)
+
+export const FOCUS_WORKSPACE_RESTING = ['terminal', 'files', 'review'] as const
+
 export function registerLayoutPresets() {
   // Simple is always the Basic arrangement; its one choice is which side the
   // sidebar sits. The decks are Advanced — arranging tooling is the point.
   return registerBundledPresets([
+    {
+      id: FOCUS_WORKSPACE_ID,
+      title: 'Focus workspace',
+      order: -1,
+      tree: FOCUS_WORKSPACE_TREE,
+      resting: FOCUS_WORKSPACE_RESTING
+    },
     { id: 'sidebar-left', title: 'Sidebar left', order: 0, tree: BASIC_TREE, resting: BASIC_RESTING, tier: 'simple' },
     {
       id: 'sidebar-right',
@@ -123,4 +167,23 @@ export function registerLayoutPresets() {
     { id: 'quad', title: 'Quad', order: 30, tree: QUAD_TREE, tier: 'advanced' },
     { id: DEMO_LAYOUT_ID, listed: false, title: 'Demo', order: 40, tree: DEMO_TREE }
   ])
+}
+
+const FOCUS_WORKSPACE_ADOPTED_KEY = 'hermes.desktop.focusWorkspaceAdopted.v1'
+
+/**
+ * Seat the Focus workspace ONCE per install, through the same preset apply a
+ * picker click uses: `applyTree` adopts every pane open right now (session
+ * tiles, previews) into the new geometry, so no chat, draft or attachment is
+ * lost. After that the layout is the user's — rearranging, or picking another
+ * preset, is never overruled on a later boot. Call after bundled plugins have
+ * registered so the Bots pane can take its tab slot.
+ */
+export function adoptFocusWorkspaceOnce(): void {
+  if (readKey(FOCUS_WORKSPACE_ADOPTED_KEY) !== null) {
+    return
+  }
+
+  applyLayoutPreset(FOCUS_WORKSPACE_ID, FOCUS_WORKSPACE_TREE)
+  writeKey(FOCUS_WORKSPACE_ADOPTED_KEY, 'true')
 }
