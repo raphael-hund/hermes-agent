@@ -42,6 +42,9 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
     host: {
       ...sdk.host,
       request,
+      // The pane pins every owner to a connection route before it asks, so
+      // its reads arrive here; record them on the same mock.
+      requestProfile: (_route: unknown, method: string, params: Record<string, unknown>) => request(method, params),
       // The pane's owner ladder starts here, so it has to be a real store:
       // `$focusedBotOwner` is resolved once at bot-state module load.
       state: { ...sdk.host.state, focusedSessionOwner: nanoAtom(null) }

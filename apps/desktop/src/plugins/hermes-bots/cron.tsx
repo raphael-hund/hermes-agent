@@ -37,7 +37,7 @@ import {
   useQuery,
   useValue
 } from '@hermes/plugin-sdk'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { $focusedBotOwner, $selectedBot, focusedRosterOwner } from './bot-state'
@@ -45,15 +45,87 @@ import { $botMeta, $lastRoster, botHandle, botRosterKey, botSelectionKey, isActi
 import { labeled } from './dialog-parts'
 import { botsText, type BotsText, useBots } from './i18n'
 import { displayName } from './labels'
-import { botConnectionRoute, botRosterMeta, requestForBot } from './routing'
-import { ScreenHero } from './screen-hero'
+import { botRosterMeta, requestForBot, resolveBotConnectionRoute } from './routing'
 import { ID } from './shared'
 import type { BotMeta, RosterRow, RoutineJob } from './types'
 
 const ROUTINES_KEY = [ID, 'routines']
 
-/** Last good cron list, same idea as the roster snapshot. */
-const $lastJobs = atom<RoutineJob[]>([])
+/** Last good cron list PER OWNER (connection + profile), same idea as the
+ *  roster snapshot. One shared slot let a failed refresh after a profile
+ *  switch paint the previous profile's jobs under the new profile's header. */
+const $lastJobsByOwner = atom<Readonly<Record<string, RoutineJob[]>>>({})
+
+/** The connection the roster stamps an unscoped row with — exactly the rule
+ *  `data.ts` uses when it builds rows from the active socket (a desktop with
+ *  no connection registry is the local gateway). */
+function activeConnectionId(): string {
+  return String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local').trim()
+}
+
+/**
+ * Bind a routine owner to ONE connection before anything is requested.
+ *
+ * A source-scoped row already carries its own route. An unscoped row (e.g. a
+ * roster that fell back after an agents-list failure) would otherwise ride
+ * whatever socket is active when the request finally runs — a connection
+ * switch mid-flight then filed one gateway's jobs under another's key. Here
+ * it gets a real `ProfileRoute` for the connection that is active NOW, so
+ * `requestForBot` dispatches through `host.requestProfile` to that exact
+ * connection, and the query key, cache and mutations all read the same
+ * identity. No connection to name → null: the column waits instead of
+ * guessing.
+ */
+export function pinRoutineOwner(owner: RoutineOwner): null | RosterRow {
+  const bot: RosterRow | null = typeof owner === 'string' ? { name: owner } : owner || null
+  const name = String(bot?.name || '').trim()
+
+  if (!bot || !name) {
+    return null
+  }
+
+  const resolved = resolveBotConnectionRoute(bot)
+
+  if (resolved.route) {
+    return bot
+  }
+
+  if (resolved.status === 'owner_removed') {
+    return null
+  }
+
+  const connectionId = activeConnectionId()
+
+  const route = Object.freeze({
+    connectionId,
+    mode: connectionId === 'local' ? ('local' as const) : ('remote' as const),
+    profile: name,
+    targetProfile: String(bot.targetProfile || name).trim() || name
+  })
+
+  return { ...bot, connectionId, route, sourceScoped: true }
+}
+
+/** The key a routine owner's query and cached jobs live under: the pinned
+ *  route's connection + profile. Two sources that both call a profile
+ *  "default" therefore never share a list. Empty when the owner is unproven. */
+export function routineOwnerKey(owner: RoutineOwner): string {
+  const pinned = pinRoutineOwner(owner)
+
+  return pinned ? botRosterKey(pinned) : ''
+}
+
+export function lastJobsFor(owner: RoutineOwner): RoutineJob[] {
+  return $lastJobsByOwner.get()[routineOwnerKey(owner)] ?? []
+}
+
+export function rememberJobsFor(owner: RoutineOwner, jobs: RoutineJob[]): void {
+  const key = routineOwnerKey(owner)
+
+  if (key && $lastJobsByOwner.get()[key] !== jobs) {
+    $lastJobsByOwner.set({ ...$lastJobsByOwner.get(), [key]: jobs })
+  }
+}
 
 function showsHandle(name: string, meta: BotMeta | null | undefined, bot?: RosterRow | null) {
   const display = displayName(
@@ -128,100 +200,61 @@ export async function loadRoutines(owner: RoutineOwner): Promise<RoutineListResu
     ...scope
   })) as RoutineListResult
 
-  const jobs = Array.isArray(data?.jobs) ? data.jobs : []
+  // READ ONLY. The pane opens on its own (the Focus workspace seats it at
+  // launch), so this path must never change a job: legacy delegated routines
+  // are flagged in their row and paused or removed only by the user's click.
+  return data
+}
 
-  const activeLegacyJobs = jobs.filter(
-    job => isLegacyDelegatedRoutine(job) && job.enabled !== false && job.state !== 'paused'
-  )
-
-  // A pause failing must not fail the LIST — the pane would report "could
-  // not load cronjobs" over data that loaded fine, and the 20s poll would
-  // re-attempt the failing pause inside a failing query forever. Each pause
-  // swallows its own error; the overlay only claims jobs the gateway
-  // actually paused, and the next poll retries the rest.
-  const pauses = await Promise.all(
-    activeLegacyJobs.map(job =>
-      requestForBot(bot, 'cron.manage', {
-        action: 'pause',
-        name: job.job_id,
-        ...scope
-      })
-        .then(() => true)
-        .catch(() => false)
-    )
-  )
-
-  if (!activeLegacyJobs.length) {
-    return data
-  }
-
-  const pausedIds = new Set(activeLegacyJobs.filter((job, index) => pauses[index]).map(job => job.job_id))
-
+/** The routine list query for one PINNED owner. Key and request read the
+ *  same captured route, so a later socket switch can neither redirect the
+ *  request nor re-label its answer. */
+export function routineQueryOptions(pinned: null | RosterRow) {
   return {
-    ...data,
-    jobs: jobs.map(job =>
-      pausedIds.has(job.job_id)
-        ? {
-            ...job,
-            enabled: false,
-            state: 'paused'
-          }
-        : job
-    )
+    queryKey: [...ROUTINES_KEY, pinned ? botRosterKey(pinned) : ''],
+    queryFn: () => {
+      if (!pinned || !resolveBotConnectionRoute(pinned).route) {
+        throw new Error('Scheduled jobs need a known connection.')
+      }
+
+      return loadRoutines(pinned)
+    },
+    enabled: Boolean(pinned),
+    refetchInterval: 20000,
+    staleTime: 8000
   }
 }
 
-function useRoutines(owner: RoutineOwner) {
-  const bot =
-    typeof owner === 'string'
-      ? {
-          name: owner
-        }
-      : owner
-
-  const route = botConnectionRoute(bot)
-  const key = route ? botRosterKey(bot) : bot?.name || ''
-
-  return useQuery({
-    queryKey: [...ROUTINES_KEY, key],
-    queryFn: () => loadRoutines(bot),
-    enabled: Boolean(bot?.name),
-    refetchInterval: 20000,
-    staleTime: 8000
-  })
+function useRoutines(pinned: null | RosterRow) {
+  return useQuery(routineQueryOptions(pinned))
 }
 
 /** `activeBot` is always a non-empty profile name, so the result is never
  *  nullish even when no create-owner has been captured yet. */
-export function routineCreateTarget(owner: RoutineOwner, activeBot: string): RosterRow | string {
+export function routineCreateTarget(owner: RoutineOwner, activeBot: RosterRow | string): RosterRow | string {
   return owner || activeBot
 }
 
 export async function invalidateRoutineOwner(owner: RoutineOwner) {
-  const bot =
-    typeof owner === 'string'
-      ? {
-          name: owner
-        }
-      : owner
-
-  const route = botConnectionRoute(bot)
-  const key = route ? botRosterKey(bot) : bot?.name || ''
   await queryClient.invalidateQueries({
-    queryKey: [...ROUTINES_KEY, key],
+    queryKey: [...ROUTINES_KEY, routineOwnerKey(owner)],
     exact: true
   })
 }
 
-/** Pick which cron jobs to show. A failed refresh keeps the last good list. */
+/** Pick which cron jobs to show. Only an answer with no error is `live`.
+ *  React Query keeps the last successful `data` beside a refetch error, so a
+ *  failed refresh shows that owner's last list (or the owner-scoped cache) as
+ *  stale, and an earlier EMPTY answer is not re-confirmed by an outage. */
 export function selectRoutineJobs(
   data: RoutineListResult | undefined,
   error: unknown,
   lastJobs: RoutineJob[],
   bot: string
 ) {
-  const live = Array.isArray(data?.jobs) ? data.jobs : null
-  const all = live ?? (error ? lastJobs : [])
+  const answered = Array.isArray(data?.jobs) ? data.jobs : null
+  const live = error ? null : answered
+  const all = live ?? (error ? (answered ?? lastJobs) : [])
   const scopedToBot = normalizedProfileName(data?.scoped) === normalizedProfileName(bot)
 
   return {
@@ -497,7 +530,8 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
   // toggle so the switch responds even before the refetch lands.
   const [pendingActive, setPendingActive] = useState<boolean | null>(null)
   const legacyUnsafe = isLegacyDelegatedRoutine(job)
-  const serverActive = !legacyUnsafe && job.enabled !== false && job.state !== 'paused'
+  // The real server state, legacy or not: this pane never pauses on read.
+  const serverActive = job.enabled !== false && job.state !== 'paused'
   const active = pendingActive === null ? serverActive : pendingActive
 
   if (pendingActive !== null && pendingActive === serverActive) {
@@ -543,8 +577,8 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
       // ellipsized (#91623). The chain has to be unbroken — one `auto` in it
       // re-pins the whole row.
       className={cn(
-        'group grid min-w-0 gap-1.5 rounded-lg border border-(--ui-stroke-secondary) p-2.5 transition-colors',
-        'hover:border-(--ui-stroke-primary, var(--ui-stroke-secondary))'
+        'group grid min-w-0 gap-1 rounded-lg px-2 py-2 transition-colors duration-100 hover:transition-none',
+        'hover:bg-(--ui-row-hover-background) focus-within:bg-(--ui-row-hover-background)'
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -568,13 +602,15 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
         </RowButton>
         <Switch
           checked={active}
-          disabled={busy || legacyUnsafe}
+          // A legacy routine may be paused, never resumed: resuming would run
+          // its pre-hardening prompt again.
+          disabled={busy || (legacyUnsafe && !active)}
           onCheckedChange={value => act(value ? 'resume' : 'pause')}
         />
         <Tip label={t.common.delete}>
           <Button
             aria-label={t.common.delete}
-            className="opacity-0 transition-opacity group-hover:opacity-100"
+            className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
             disabled={busy}
             onClick={() => act('remove')}
             size="icon-xs"
@@ -1215,7 +1251,12 @@ export function RoutinesPane() {
   const allMeta = useValue($botMeta)
   const meta = owner ? botRosterMeta(owner, allMeta) : null
   const { shape, color, image } = botAppearance(bot, meta)
-  const { data, error, isLoading, refetch } = useRoutines(owner)
+  const connectionId = useValue(host.state.connectionId)
+  // One captured identity per (owner row, active connection): every request,
+  // cache write, row mutation and create below goes to THIS route.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- connectionId re-pins an unscoped owner
+  const pinned = useMemo(() => pinRoutineOwner(owner), [owner, connectionId])
+  const { data, error, isLoading, refetch } = useRoutines(pinned)
   const b = useBots()
   const { t } = useI18n()
   const c = t.cron
@@ -1225,25 +1266,27 @@ export function RoutinesPane() {
   // an open inspector must follow the live row (next run, pause, last error)
   // instead of freezing the snapshot that was on screen when it opened.
   const [detailJobId, setDetailJobId] = useState<null | string>(null)
-  const createTarget = owner ? routineCreateTarget(createOwner, bot) : null
+  const createTarget = pinned ? routineCreateTarget(createOwner, pinned) : null
 
   const openCreate = () => {
-    if (!owner) {
+    if (!pinned) {
       return
     }
 
-    setCreateOwner(owner)
+    // The dialog keeps the pinned route it opened with: a submit after a
+    // connection switch still creates on the owner the user was looking at.
+    setCreateOwner(pinned)
     setCreateOpen(true)
   }
 
-  if (!owner) {
+  if (!owner || !pinned) {
     return <PanelEmpty description={b.cron.needsRosterFirst} icon="hubot" title={c.title} />
   }
 
-  const view = selectRoutineJobs(data, error, $lastJobs.get(), bot)
+  const view = selectRoutineJobs(data, error, lastJobsFor(pinned), bot)
 
   if (view.live) {
-    $lastJobs.set(view.live)
+    rememberJobsFor(pinned, view.live)
   }
 
   const jobs = view.jobs
@@ -1255,14 +1298,11 @@ export function RoutinesPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-3 pt-3">
-        <ScreenHero bot={owner} meta={meta} />
-      </div>
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <div className="flex items-center gap-2.5 px-3 pt-3 pb-3" data-slot="routines-owner">
         <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={22} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-1.5 truncate">
-            <div className="truncate text-xs font-semibold">
+            <div className="truncate text-[0.8125rem] font-medium text-(--ui-text-primary)">
               {displayName(
                 {
                   name: bot
@@ -1274,7 +1314,7 @@ export function RoutinesPane() {
               <span className="shrink-0 font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
             ) : null}
           </div>
-          <div className="text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>
+          <div className="text-[0.625rem] uppercase tracking-[0.08em] text-(--ui-text-quaternary)">{c.title}</div>
         </div>
         <Tip label={c.newCron}>
           <Button aria-label={c.newCron} onClick={openCreate} size="icon-xs" variant="ghost">
@@ -1282,7 +1322,7 @@ export function RoutinesPane() {
           </Button>
         </Tip>
       </div>
-      <div className="mx-3 border-t border-(--ui-stroke-secondary)" />
+      <div className="mx-3 border-t border-(--ui-stroke-tertiary)" />
       {staleNotice ? (
         <div className="mx-3 mt-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
           {staleNotice}
@@ -1292,7 +1332,7 @@ export function RoutinesPane() {
         <div className="flex flex-1 items-center justify-center">
           <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
         </div>
-      ) : error && !view.all.length ? (
+      ) : error && !jobs.length ? (
         <PanelEmpty
           action={
             <Button onClick={() => void refetch()} size="sm" variant="secondary">
@@ -1318,9 +1358,9 @@ export function RoutinesPane() {
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid gap-1.5 px-2.5 py-2">
+          <div className={cn('grid gap-0.5 px-1.5 py-2', staleNotice && 'opacity-60')} data-stale={staleNotice ? '' : undefined}>
             {jobs.map(job => (
-              <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={owner} />
+              <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={pinned} />
             ))}
           </div>
         </div>
@@ -1330,10 +1370,9 @@ export function RoutinesPane() {
         // Non-null past the `!owner` early return above: `routineCreateTarget`
         // falls back to the active profile name.
         bot={createTarget!}
-        // TODO(bot-mode-types): `createTarget` is a roster row whenever a create
-        // owner is set, so this key stringifies to "[object Object]" instead of
-        // identifying the target bot. Cast to keep the as-written behavior.
-        key={createTarget as string}
+        // Keyed by the pinned owner identity, so a dialog for one connection
+        // never carries its form state over to another.
+        key={routineOwnerKey(createTarget)}
         onClose={() => {
           setCreateOpen(false)
           setCreateOwner(null)

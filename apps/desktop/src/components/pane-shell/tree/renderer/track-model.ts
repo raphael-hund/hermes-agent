@@ -58,6 +58,9 @@ export interface PaneSizing {
 interface PaneChrome extends PaneSizing {
   /** Leaves the grid on narrow viewports; revealed as an edge overlay. */
   collapsible?: boolean
+  /** With `collapsible`: leaves the grid already below the wider early fold
+   *  point, so a secondary rail yields before the chat gets cramped. */
+  foldsEarly?: boolean
   /** Arrive minimized — a rail tab rather than an open zone. For a pane that
    *  docks to an edge this is the vertical strip; the user's first expand is
    *  persisted on the zone and wins from then on. Applied when the pane ENTERS
@@ -139,6 +142,19 @@ interface PaneChrome extends PaneSizing {
 }
 
 export const paneChrome = (c: Contribution | undefined) => (c?.data ?? {}) as PaneChrome
+
+/** Does this pane leave the grid for an edge overlay at the current width?
+ *  `narrow` is the dock floor (every collapsible pane folds), `early` the
+ *  wider fold point (only `foldsEarly` panes fold). */
+/** The edge a folded pane's overlay slides in from. */
+export const overlaySide = (c: Contribution | undefined): 'left' | 'right' =>
+  paneChrome(c).placement === 'left' ? 'left' : 'right'
+
+export function paneFolded(c: Contribution | undefined, narrow: boolean, early: boolean): boolean {
+  const chrome = paneChrome(c)
+
+  return Boolean(chrome.collapsible) && (narrow || (early && Boolean(chrome.foldsEarly)))
+}
 
 /** Resolve a computed style length ("237px" / "none" / "auto") to px. */
 export function computedPx(value: string, fallback: number): number {
@@ -333,7 +349,13 @@ export function subtreeGone(node: LayoutNode, ctx: TrackContext): boolean {
     return false
   }
 
-  return !ids.some(id => paneChrome(ctx.paneFor(id)).placement === 'main')
+  // A collapsible main pane (Bot Mode's jobs column) folds into an edge
+  // overlay on purpose, so only a non-collapsible main pane holds the floor.
+  return !ids.some(id => {
+    const chrome = paneChrome(ctx.paneFor(id))
+
+    return chrome.placement === 'main' && !chrome.collapsible
+  })
 }
 
 /**

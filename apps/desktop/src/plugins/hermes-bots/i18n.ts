@@ -115,6 +115,7 @@ const en: BotsMessages = {
     createdOn: (name, target) => `Bot "${name}" created on ${target}`
   },
   roster: {
+    brand: 'Hermes',
     search: 'Search bots and group chats',
     searchPlaceholder: 'Search bots and group chats…',
     newBotOrGroup: 'New bot or group chat',
@@ -440,7 +441,7 @@ const en: BotsMessages = {
     failed: 'Failed',
     deliveryFailed: 'Ran, but delivery failed',
     blockedConfig: 'Blocked by configuration (not run)',
-    legacyUnsafe: 'Paused for security: delete and recreate this legacy job before running it again.',
+    legacyUnsafe: 'Old job format. Pause or delete it, then create it again. It cannot be resumed here.',
     filterHint:
       'Scheduled jobs exist in this profile but none are tagged for this bot. Name a job "[bot:<name>] …" to show it here, or see them in Cron below.',
     needsRosterFirst: 'This bot has to appear in the roster first.',
@@ -560,6 +561,7 @@ const ja: BotsMessages = {
     createdOn: (name, target) => `${target} にボット「${name}」を作成しました`
   },
   roster: {
+    brand: 'Hermes',
     search: 'ボットとグループチャットを検索',
     searchPlaceholder: 'ボットとグループチャットを検索…',
     newBotOrGroup: '新しいボットまたはグループチャット',
@@ -887,7 +889,7 @@ const ja: BotsMessages = {
     failed: '失敗',
     deliveryFailed: '実行済みですが、配信に失敗しました',
     blockedConfig: '設定によりブロック（未実行）',
-    legacyUnsafe: '安全のため一時停止中です。この旧形式のジョブを削除して作り直してから実行してください。',
+    legacyUnsafe: '旧形式のジョブです。一時停止または削除してから作り直してください。ここでは再開できません。',
     filterHint:
       'このプロファイルには定期実行ジョブがありますが、このボット向けのタグが付いたものはありません。ジョブ名を「[bot:<名前>] …」にするとここに表示されます。下のCronでも確認できます。',
     needsRosterFirst: 'このボットは先に名簿に表示される必要があります。',
@@ -1001,6 +1003,7 @@ const zh: BotsMessages = {
     createdOn: (name, target) => `已在 ${target} 上创建机器人“${name}”`
   },
   roster: {
+    brand: 'Hermes',
     search: '搜索机器人和群聊',
     searchPlaceholder: '搜索机器人和群聊…',
     newBotOrGroup: '新建机器人或群聊',
@@ -1317,7 +1320,7 @@ const zh: BotsMessages = {
     failed: '失败',
     deliveryFailed: '已运行，但发送失败',
     blockedConfig: '配置阻止了运行（未执行）',
-    legacyUnsafe: '为安全起见已暂停：请删除并重新创建此旧任务，然后再运行。',
+    legacyUnsafe: '旧格式任务。请暂停或删除后重新创建。此处无法恢复运行。',
     filterHint:
       '此配置档案中有定时任务，但没有一个标记给这个机器人。将任务命名为“[bot:<名称>] …”即可显示在这里，也可以在下方的 Cron 中查看。',
     needsRosterFirst: '这个机器人需要先出现在名册中。',
@@ -1431,6 +1434,7 @@ const zhHant: BotsMessages = {
     createdOn: (name, target) => `已在 ${target} 上建立機器人「${name}」`
   },
   roster: {
+    brand: 'Hermes',
     search: '搜尋機器人和群組聊天',
     searchPlaceholder: '搜尋機器人和群組聊天…',
     newBotOrGroup: '新增機器人或群組聊天',
@@ -1747,7 +1751,7 @@ const zhHant: BotsMessages = {
     failed: '失敗',
     deliveryFailed: '已執行，但傳送失敗',
     blockedConfig: '設定阻止了執行（未執行）',
-    legacyUnsafe: '基於安全考量已暫停：請刪除並重新建立此舊工作，然後再執行。',
+    legacyUnsafe: '舊格式工作。請暫停或刪除後重新建立。此處無法恢復執行。',
     filterHint:
       '此設定檔中有排程工作，但沒有任何一個標記給這個機器人。將工作命名為「[bot:<名稱>] …」即可顯示在這裡，也可以在下方的 Cron 中查看。',
     needsRosterFirst: '這個機器人需要先出現在名冊中。',

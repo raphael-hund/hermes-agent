@@ -1,13 +1,13 @@
 /**
  * What a bot's chat shows before it has said anything.
  *
- * Core's splash is Hermes' own wordmark and belongs to a fresh draft; a bot
- * chat is neither. It gets the same lettering with the bot's name in it, over
- * the same face the roster row and tab carry, so an empty conversation still
- * says whose it is.
+ * Core's splash is Hermes' own mark and belongs to a fresh draft; a bot chat
+ * is neither. It shows the face the roster row and tab carry with the bot's
+ * name at reading size, so an empty conversation still says whose it is
+ * without a display-size title competing with the composer.
  */
 
-import { host, useValue, Wordmark } from '@hermes/plugin-sdk'
+import { host, useValue } from '@hermes/plugin-sdk'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { isBackfilledFacePng } from './avatar-image'
@@ -17,8 +17,8 @@ import { displayName } from './labels'
 import { botRosterMeta } from './routing'
 import type { RosterRow } from './types'
 
-const FACE_SIZE = 96
-const FACE_GAP = 16
+const FACE_SIZE = 44
+const FACE_GAP = 12
 /** What the face costs the stack in height — the offset that puts the name on
  *  the center line is derived from it, so the two can never drift apart. */
 const FACE_BLOCK = FACE_SIZE + FACE_GAP
@@ -102,9 +102,10 @@ export function BotChatEmpty({ sessionId }: { sessionId: string }) {
           />
         </div>
 
-        <Wordmark className="mb-1" text={name} width="calc(80% - 1rem)" />
-
-        <p className="m-0 text-center leading-normal tracking-tight">{b.bot.chatEmpty}</p>
+        <p className="m-0 text-center text-[0.9375rem] font-medium text-(--ui-text-primary)">{name}</p>
+        <p className="m-0 mt-1 text-center text-[0.8125rem] leading-relaxed text-(--ui-text-tertiary)">
+          {b.bot.chatEmpty}
+        </p>
       </div>
     </div>
   )

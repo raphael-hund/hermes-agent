@@ -26,10 +26,10 @@ import { useWindowControlsOverlap } from '../../geometry'
 import { $narrowOverlayPaneIds } from '../../narrow-overlay-state'
 import { NO_PANE_GROUP } from '../../pane-visibility'
 import { allPaneIds, findGroupOfPane, type LayoutNode } from '../model'
-import { $hiddenTreePanes, $layoutTree, $narrowViewport } from '../store'
+import { $earlyFoldViewport, $hiddenTreePanes, $layoutTree, $narrowViewport } from '../store'
 
 import { KeepAlivePaneSlot, useStablePaneHosts } from './keep-alive-panes'
-import { fixedTrackSize, paneChrome, type TrackContext } from './track-model'
+import { fixedTrackSize, overlaySide, paneChrome, paneFolded, type TrackContext } from './track-model'
 
 /** The width a revealed narrow overlay sizes itself to: the SAME resolution
  *  the pane's zone uses while docked — declared max() refined by the live
@@ -51,7 +51,11 @@ export function narrowOverlayWidth(ctx: TrackContext, tree: LayoutNode | null, r
 
 export function NarrowOverlays() {
   const titlebarHeight = useTitlebarHeight()
-  const narrow = useStore($narrowViewport)
+  const narrowViewport = useStore($narrowViewport)
+  const earlyFold = useStore($earlyFoldViewport)
+  // Overlays run whenever ANY pane is folded: below the dock floor every
+  // collapsible pane, below the early fold point only `foldsEarly` panes.
+  const narrow = narrowViewport || earlyFold
   const solo = useStore($chatOnboardingSolo)
   const tree = useStore($layoutTree)
   const panes = useContributions('panes')
@@ -91,8 +95,8 @@ export function NarrowOverlays() {
   const collapsibles = useMemo(
     // Solo adopts sidebar panes without their surrounding sidebar chrome.
     // Suppress every reveal path while those panes are intentionally hidden.
-    () => (solo ? [] : panes.filter(p => paneChrome(p).collapsible && inTree.has(p.id) && !hiddenPanes.has(p.id))),
-    [solo, panes, inTree, hiddenPanes]
+    () => (solo ? [] : panes.filter(p => paneFolded(p, narrowViewport, earlyFold) && inTree.has(p.id) && !hiddenPanes.has(p.id))),
+    [solo, panes, inTree, hiddenPanes, narrowViewport, earlyFold]
   )
 
   const collapsiblesRef = useRef(collapsibles)
@@ -169,7 +173,7 @@ export function NarrowOverlays() {
     }
   }, [narrow, solo])
 
-  const sideOf = (c: Contribution) => (paneChrome(c).placement === 'left' ? 'left' : 'right')
+  const sideOf = overlaySide
   const revealed = reveal ? collapsibles.find(p => p.id === reveal.id) : undefined
   const sides = [...new Set(collapsibles.map(sideOf))]
 

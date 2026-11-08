@@ -480,6 +480,34 @@ from their root base tokens; do not multiply the global tokens or nest CSS zoom.
   + squircle backgrounds (`assets/nous-girl-*.svg` × `assets/backgrounds/`).
   It replaced scattered Sparkles glyphs in updates / onboarding / about. Use it
   for hero/brand moments; don't reintroduce decorative star/sparkle icons.
+- **`HermesMark`** (`src/components/hermes-mark.tsx`, re-exported by the SDK)
+  is the sidebar-scale Hermes glyph: a light ghost with two fine orbits, no
+  backdrop tile. Body ink is `--ui-text-primary`; orbits read `--ui-red`,
+  `--ui-green` and `--ui-blue`, so skins retint it. It heads the Bots roster
+  and marks the empty draft. An empty chat shows this mark and one quiet line,
+  never display-size lettering; `Wordmark` stays available to plugins only.
+
+## Focus workspace
+
+The default skin is **Focus** (`themes/presets.ts`), and a fresh install
+arrives once on the **Focus workspace** preset (`app/contrib/layout-presets.ts`,
+`adoptFocusWorkspaceOnce`): the Bots roster fronted over Sessions on the left,
+the chat in the center, the selected profile's Scheduled jobs on the right,
+terminal/files/review resting in their slots. The arrival goes through
+`applyLayoutPreset`, so open tiles are adopted, and it runs once per install;
+the layout is the user's afterwards.
+
+- **Surfaces:** `[data-hermes-theme='focus']` in `styles.css` pins chat
+  `#202020`, side columns `#222222`, active row `#2c2c2c` through the existing
+  `--ui-*` tokens. Components keep reading the tokens, never the literals.
+- **Type:** chrome stays 13px; conversation text is 14px with a 1.4rem leading.
+  Tab labels read in sentence case (`data-slot="pane-tab-label"`).
+- **Composer:** the shell's corner is `--composer-radius` (default
+  `--radius-2xl`); Focus sets a pill. No gradient wash behind it.
+- **Jobs column:** shows the selected profile from the first frame (a roster
+  selection is enough to own the workspace). Its last-good list is cached per
+  owner (connection + profile), so a failed refresh after a switch never
+  paints another profile's jobs.
 
 ## Motion
 

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
+import { HermesMark } from '@/components/hermes-mark'
 import { useI18n } from '@/i18n'
 import { capitalize, normalize } from '@/lib/text'
 
 import introCopyJsonl from './intro-copy.jsonl?raw'
-import { Wordmark } from './wordmark'
 
 type IntroCopy = {
   headline: string
@@ -146,7 +146,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
+const WORDMARK = 'Hermes Agent'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
@@ -175,10 +175,12 @@ export function Intro({ personality, seed }: IntroProps) {
       className="pointer-events-none flex w-full min-w-0 flex-col items-center justify-center px-0.5 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
       data-slot="aui_intro"
     >
-      <div className="w-full min-w-0">
-        <Wordmark className="mb-1" text={WORDMARK} />
+      {/* A calm start: the small mark and one quiet line. The chat's job is to
+          be typed into, so nothing here competes with the composer. */}
+      <div className="flex w-full min-w-0 max-w-md flex-col items-center gap-4">
+        <HermesMark className="intro-mark" label={WORDMARK} size={56} />
 
-        <p className="m-0 text-center leading-normal tracking-tight">{body}</p>
+        <p className="m-0 text-center text-[0.8125rem] leading-relaxed text-(--ui-text-tertiary)">{body}</p>
       </div>
     </div>
   )

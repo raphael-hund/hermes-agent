@@ -472,7 +472,7 @@ export default {
       // zone's tab strip, so the pane stays reachable while collapsed.
       data: {
         placement: 'left',
-        width: '260px',
+        width: '250px',
         collapsible: true,
         hideOnly: true,
         tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
@@ -520,7 +520,11 @@ export default {
           // arrives as the right edge's vertical tab and takes no width off the
           // chat until the user opens it.
           defaultCollapsed: true,
-          width: '250px'
+          // Folds into the right edge overlay below the early fold point, so a
+          // mid-size window keeps the chat readable; wide windows keep it docked.
+          collapsible: true,
+          foldsEarly: true,
+          width: '240px'
         },
         render: () => <RoutinesPane />
       })
@@ -542,7 +546,14 @@ export default {
 
     if (typeof host.paneVisibility === 'function') {
       // The contribution-scoped pane id (`register` prefixes `${ID}:`).
-      const $sidebarVisible = host.paneVisibility(`${ID}:pane`)
+      // Bot Mode follows the Bots TAB, not the column's pixels: closing the
+      // profile column or folding it on a narrow window keeps the jobs column
+      // registered and reachable. Older hosts fall back to visibility.
+      const $sidebarVisible =
+        typeof host.paneSelection === 'function'
+          ? host.paneSelection(`${ID}:pane`)
+          : host.paneVisibility(`${ID}:pane`)
+
       let unregisterRoutines: null | (() => void) = null
       // Armed by each Bots-tab entry, spent by the first registration after it.
       let restoreDismissedOnRegister = true
@@ -613,6 +624,8 @@ export default {
       })
 
       const stopGroupSync = $groupChatWorkspace.listen(syncRoutinesPane)
+      // The first roster answer seats a selection; the jobs column follows it.
+      const stopSelectionSync = $selectedRosterKey.listen(syncRoutinesPane)
 
       // React on the NEXT tick — a layout notification arrives mid-mutation,
       // and registering/unregistering panes from inside it would re-enter the
@@ -717,6 +730,7 @@ export default {
         ctx.onDispose(() => {
           stopSidebarSync()
           stopGroupSync()
+          stopSelectionSync()
           stopFocusSync?.()
           stopReclaimSync?.()
         })

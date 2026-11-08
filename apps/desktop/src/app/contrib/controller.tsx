@@ -95,7 +95,7 @@ import { watchSessionPins } from '@/store/session-pin-sync'
 import { $botChatScopes } from '@/store/session-states'
 import { watchUnreadWriteGuard } from '@/store/session-unread-remote'
 import { $statusbarVisible } from '@/store/statusbar-prefs'
-import { isBrowserWindow, isHudWindow } from '@/store/windows'
+import { isBrowserWindow, isHudWindow, isSecondaryWindow } from '@/store/windows'
 
 import { BrowserPopoutShell } from '../chat/browser-popout-shell'
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
@@ -119,7 +119,7 @@ import { $workspaceIsPage, WORKSPACE_PAGE_HEADER_AREA } from '../routes'
 import { Butterbar } from '../shell/butterbar'
 import { TermsButterbar } from '../shell/terms-butterbar'
 
-import { BASIC_TREE, DEFAULT_TREE, registerLayoutPresets } from './layout-presets'
+import { adoptFocusWorkspaceOnce, BASIC_TREE, DEFAULT_TREE, registerLayoutPresets } from './layout-presets'
 import { bindLayoutSides } from './layout-sides'
 import { FilesPane, LogsPane, ReviewPaneContent } from './panes'
 import { PluginPreviewConsentDialog } from './plugin-preview-consent-dialog'
@@ -457,6 +457,13 @@ discoverBundledPlugins()
 // pass runs as layout hydration: the reload prune→re-register cycle must not
 // record split shares (#108679).
 hydrateContributedPanes()
+
+// The calm three-column workspace is the arrival layout. Only the primary
+// window owns the persisted tree; pop-outs, the Browser and the HUD keep
+// their own stripped layouts.
+if (!isSecondaryWindow() && !isBrowserWindow() && !isHudWindow()) {
+  adoptFocusWorkspaceOnce()
+}
 
 // Session + route (page) tiles: persisted splits register panes docked beside
 // main. A popped-out Browser and the HUD have no layout tree — registering

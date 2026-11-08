@@ -29,6 +29,7 @@ import { syncWorkspaceRoute } from '@/app/routes'
 import type { ClientSessionState } from '@/app/types'
 import {
   $newSessionTabAction,
+  $paneSelected,
   $paneVisible,
   adoptContributedPanes,
   registerPaneCloser,
@@ -1298,6 +1299,12 @@ export const host = {
    *  (`typeof host.paneVisibility === 'function'`). */
   paneVisibility: (paneId: string): ReadableAtom<boolean> => $paneVisible(paneId),
 
+  /** Reactive "this pane is its zone's chosen tab", even while the zone is
+   *  minimized, its side closed or the window too narrow to dock it. A mode a
+   *  tab switches on (Bot Mode) follows this, so closing or folding a column
+   *  never leaves the mode. Feature-detect on older desktops. */
+  paneSelection: (paneId: string): ReadableAtom<boolean> => $paneSelected(paneId),
+
   /** Forget a persisted Close for a contributed pane so adoption puts it back
    *  where its dock hint says — WITHOUT fronting it or un-collapsing its zone
    *  (that is `revealPane`, for an explicit user action). For a pane a plugin
@@ -1686,6 +1693,8 @@ export { composerInputBacking, composerSurfaceRing } from '@/components/chat/com
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'
+/** The small Hermes ghost with orbits — the sidebar-scale brand mark. */
+export { HermesMark } from '@/components/hermes-mark'
 /** Pane placement roles. `'floating'` is the one NON-tiling value: the pane is
  *  excluded from the layout tree and rendered as a fixed, draggable card above
  *  it — it takes no width from any zone, has no tab, and can't be docked.
