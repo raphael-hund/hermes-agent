@@ -30,3 +30,10 @@ export const PAGE_MAX_W = 'max-w-[75rem]'
 export const SIDEBAR_DOCK_MIN_WIDTH_PX = 640
 // `max-width` is inclusive: shave a hair so an exactly-640px window docks.
 export const SIDEBAR_COLLAPSE_MEDIA_QUERY = `(max-width: ${SIDEBAR_DOCK_MIN_WIDTH_PX - 0.02}px)`
+
+// A second, wider fold point for panes that declare `foldsEarly` (the Bot Mode
+// jobs column). Two rails (about 250px + 240px) beside a chat that wants about
+// 470px stop fitting here, so the early pane leaves the grid first and the chat
+// keeps its reading width. The left rail still folds at the dock floor above.
+export const EARLY_FOLD_MIN_WIDTH_PX = 960
+export const EARLY_FOLD_MEDIA_QUERY = `(max-width: ${EARLY_FOLD_MIN_WIDTH_PX - 0.02}px)`

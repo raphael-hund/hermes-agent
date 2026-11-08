@@ -520,6 +520,10 @@ export default {
           // arrives as the right edge's vertical tab and takes no width off the
           // chat until the user opens it.
           defaultCollapsed: true,
+          // Folds into the right edge overlay below the early fold point, so a
+          // mid-size window keeps the chat readable; wide windows keep it docked.
+          collapsible: true,
+          foldsEarly: true,
           width: '240px'
         },
         render: () => <RoutinesPane />

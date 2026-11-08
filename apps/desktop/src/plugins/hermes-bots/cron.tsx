@@ -46,7 +46,6 @@ import { labeled } from './dialog-parts'
 import { botsText, type BotsText, useBots } from './i18n'
 import { displayName } from './labels'
 import { botRosterMeta, requestForBot, resolveBotConnectionRoute } from './routing'
-import { ScreenHero } from './screen-hero'
 import { ID } from './shared'
 import type { BotMeta, RosterRow, RoutineJob } from './types'
 
@@ -1299,9 +1298,6 @@ export function RoutinesPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-3 pt-3">
-        <ScreenHero bot={owner} meta={meta} />
-      </div>
       <div className="flex items-center gap-2.5 px-3 pt-3 pb-3" data-slot="routines-owner">
         <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={22} />
         <div className="min-w-0 flex-1">

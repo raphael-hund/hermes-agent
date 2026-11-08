@@ -6,7 +6,7 @@
 
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
-import { SIDEBAR_COLLAPSE_MEDIA_QUERY } from '@/app/layout-constants'
+import { EARLY_FOLD_MEDIA_QUERY, SIDEBAR_COLLAPSE_MEDIA_QUERY } from '@/app/layout-constants'
 import { setPluginEnabled } from '@/contrib/plugins-store'
 import { registry } from '@/contrib/registry'
 import { translateNow } from '@/i18n'
@@ -48,6 +48,7 @@ import {
 import { isTreePaneParked } from './parked-panes'
 import { FLOATING_PLACEMENT } from './renderer/floating-rect'
 import { tabStripVisibleForZone } from './renderer/strip-visibility'
+import { paneFolded } from './renderer/track-model'
 
 // v2: v1 trees were saved against placeholder panes with index-order zone
 // assignment (chat could land in a corner cell). Retire them wholesale.
@@ -835,11 +836,7 @@ export function shownPanesInGroup(group: { panes: readonly string[] }): string[]
 
     // Match TreeGroup's paneShown for the narrow breakpoint — collapsible
     // panes drop out of the strip when the viewport collapses them.
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia?.(SIDEBAR_COLLAPSE_MEDIA_QUERY).matches &&
-      Boolean((pane.data as { collapsible?: boolean } | undefined)?.collapsible)
-    ) {
+    if (paneFolded(pane, $narrowViewport.get(), $earlyFoldViewport.get())) {
       return false
     }
 
@@ -1300,6 +1297,14 @@ const narrowQuery = typeof window !== 'undefined' ? window.matchMedia?.(SIDEBAR_
 export const $narrowViewport = atom(Boolean(narrowQuery?.matches))
 
 narrowQuery?.addEventListener('change', event => $narrowViewport.set(event.matches))
+
+/** The wider early fold point: only panes declaring `foldsEarly` leave the
+ *  grid here (see EARLY_FOLD_MEDIA_QUERY). Same guard as `narrowQuery`. */
+const earlyFoldQuery = typeof window !== 'undefined' ? window.matchMedia?.(EARLY_FOLD_MEDIA_QUERY) : undefined
+
+export const $earlyFoldViewport = atom(Boolean(earlyFoldQuery?.matches))
+
+earlyFoldQuery?.addEventListener('change', event => $earlyFoldViewport.set(event.matches))
 
 /** The titlebar flip toggle (⌘\): mirror the whole layout left↔right. */
 export function mirrorLayoutTree() {

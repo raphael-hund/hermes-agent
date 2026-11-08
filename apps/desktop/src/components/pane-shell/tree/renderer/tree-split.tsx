@@ -21,6 +21,7 @@ import type { LayoutNode, SplitNode } from '../model'
 import { allPaneIds } from '../model'
 import {
   $collapsedTreeSides,
+  $earlyFoldViewport,
   $hiddenTreePanes,
   $narrowViewport,
   isCollapsePane,
@@ -41,6 +42,7 @@ import {
   MIN_PANE_PX,
   MINIMIZED_TRACK,
   paneChrome,
+  paneFolded,
   type PaneSizing,
   resolveCssPx,
   shownPaneIds,
@@ -106,6 +108,7 @@ export function TreeSplit({
   const panes = useContributions('panes')
   const hiddenPanes = useStore($hiddenTreePanes)
   const narrow = useStore($narrowViewport)
+  const earlyFold = useStore($earlyFoldViewport)
   // Scoped to THIS subtree's panes: a sash drag writes size overrides on every
   // pointermove, but only the splits whose subtree actually resized should
   // re-render — not every split in the tree.
@@ -142,7 +145,7 @@ export function TreeSplit({
   // (unregistered) or narrow-collapsed panes stay gone. Restores itself on exit
   // (render-only).
   const paneGone = (id: string) =>
-    !paneFor(id) || (!revealsHidden && hiddenPanes.has(id)) || (narrow && Boolean(paneChrome(paneFor(id)).collapsible))
+    !paneFor(id) || (!revealsHidden && hiddenPanes.has(id)) || paneFolded(paneFor(id), narrow, earlyFold)
 
   const trackCtx: TrackContext = { paneFor, paneGone, overrides }
 
@@ -547,6 +550,7 @@ export function TreeSplit({
       node.weights,
       hiddenPanes,
       narrow,
+      earlyFold,
       overrides,
       panes
     ]
@@ -636,6 +640,7 @@ export function TreeSplit({
       node.weights,
       hiddenPanes,
       narrow,
+      earlyFold,
       overrides,
       panes
     ]
@@ -671,9 +676,16 @@ export function TreeSplit({
     const collapsed = isCollapsed(child) || sideGone(i)
     const track = minimized || collapsed ? null : fixedTrackSize(child, axis, trackCtx)
     const sizing = minimized || collapsed ? null : sizingFor(child, track)
+
     // Narrow-collapse UNMOUNTS (the edge overlay owns the live instance) — but
     // only for panes the breakpoint collapsed, not ones a chrome toggle hid.
-    const narrowCollapsed = narrow && collapsed && allPaneIds(child).some(id => !hiddenPanes.has(id))
+    // Between the two fold points only `foldsEarly` panes unmount; every other
+    // collapsed subtree keeps the chrome-toggle display:none behaviour.
+    const narrowCollapsed =
+      collapsed &&
+      (narrow
+        ? allPaneIds(child).some(id => !hiddenPanes.has(id))
+        : earlyFold && allPaneIds(child).some(id => !hiddenPanes.has(id) && paneFolded(paneFor(id), false, true)))
 
     return { child, collapsed, minimized, narrowCollapsed, sizing, track }
   })

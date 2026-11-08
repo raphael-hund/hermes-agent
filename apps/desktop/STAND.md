@@ -11,7 +11,9 @@ unverändert.
   und die Marke.
 - **Marke:** `HermesMark` ist ein kleiner heller Geist mit 3 feinen
   Umlaufbahnen. Er steht oben in der Profil-Spalte und im leeren Chat.
-- **Leerzustände:** Ein leerer Chat zeigt die Marke und einen ruhigen Satz.
+- **Leerzustände:** Ein leerer Chat zeigt die Marke und eine kurze Zeile.
+  Die Zeile sagt, was du tun kannst. Sie kommt aus der Intro-Rotation in
+  allen Sprachen.
   Ein leerer Bot-Chat zeigt ein kleines Gesicht und den Namen in Lesegrösse.
 - **Eingabe:** Die Eingabe ist eine Pille. Der Radius kommt aus dem neuen
   Token `--composer-radius`. Ohne Focus bleibt der alte Wert.
@@ -21,9 +23,15 @@ unverändert.
 - **Profil-Spalte:** Oben stehen die Marke und «Hermes». Die Zeilen sind ruhig,
   13px gross und haben einen sichtbaren Tastaturfokus. Sessions bleiben ein
   Tab daneben.
-- **Job-Spalte:** Sie zeigt die Jobs des gewählten Profils sofort an. Die
+- **Job-Spalte:** Sie zeigt Profilkopf, Plus und die echten Jobs. Die
   letzte gute Liste gilt pro Verbindung und Profil. Ein Wechsel zeigt also
   nie fremde Jobs.
+- **Screen:** Die grosse Screen-Karte ist weg. Der Screen öffnet sich über
+  das Rechtsklick-Menü der Bot-Zeile und über den Screen-Eintrag im
+  Profilkopf der Sessions. Das Backend bleibt gleich.
+- **Kleine Fenster:** Unter 960px faltet die Job-Spalte an den rechten Rand.
+  Unter 640px faltet auch die linke Spalte. Beide öffnen sich als Overlay
+  am Rand. Ab 960px bleiben 3 Spalten. Das Layout im Baum bleibt gleich.
 
 ## Das bleibt unverändert
 
@@ -41,8 +49,8 @@ unverändert.
 - **Tests:** Themes, Komponenten, Pane-Shell, Contrib und der Bot-Mode laufen
   mit vitest grün.
 - **Neue Tests:** Das Start-Layout wird einmal übernommen und behält offene
-  Tabs. Die letzte Job-Liste bleibt beim Profil. Beide Tests sind ohne den Fix
-  rot.
+  Tabs. Die letzte Job-Liste bleibt beim Profil. Die Job-Spalte faltet
+  zwischen 640px und 960px allein. Alle Tests sind ohne den Fix rot.
 
 ## Diese Punkte sind offen
 
