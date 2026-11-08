@@ -235,9 +235,9 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
       aria-busy={isOpening || undefined}
       aria-label={rowTooltip}
       className={cn(
-        'flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-md px-2 py-2 text-left transition-colors',
-        'hover:bg-(--chrome-action-hover)',
-        isActive && 'bg-(--ui-row-active-background)',
+        'flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-lg px-2.5 py-2.5 text-left transition-colors duration-100 hover:transition-none',
+        'hover:bg-(--ui-row-hover-background) focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-(--ui-stroke-primary)',
+        isActive && 'bg-(--ui-row-active-background) hover:bg-(--ui-row-active-background)',
         // The row being dragged fades in place; the browser's drag image is
         // the row itself, so the ghost under the pointer is the full row.
         dragging && 'opacity-40'
@@ -260,7 +260,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
           mood={botMood}
           name={bot.name}
           shape={shape}
-          size={34}
+          size={30}
         />
       </div>
       <div className="min-w-0 flex-1">
@@ -282,7 +282,9 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
               </Tip>
             ) : null}
             <Tip label={rowTooltip}>
-              <span className="min-w-0 truncate text-[0.8125rem] font-medium">{displayName(bot, meta)}</span>
+              <span className="min-w-0 truncate text-[0.8125rem] font-medium text-(--ui-text-primary)">
+                {displayName(bot, meta)}
+              </span>
             </Tip>
           </div>
           {attention ? (
@@ -304,7 +306,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
           ) : null}
         </div>
         {showDetailsRow ? (
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-(--ui-text-tertiary)">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.75rem] text-(--ui-text-tertiary)">
             {showHandle ? (
               <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
             ) : null}

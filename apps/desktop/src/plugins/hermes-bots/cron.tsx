@@ -52,8 +52,31 @@ import type { BotMeta, RosterRow, RoutineJob } from './types'
 
 const ROUTINES_KEY = [ID, 'routines']
 
-/** Last good cron list, same idea as the roster snapshot. */
-const $lastJobs = atom<RoutineJob[]>([])
+/** Last good cron list PER OWNER (connection + profile), same idea as the
+ *  roster snapshot. One shared slot let a failed refresh after a profile
+ *  switch paint the previous profile's jobs under the new profile's header. */
+const $lastJobsByOwner = atom<Readonly<Record<string, RoutineJob[]>>>({})
+
+/** The key a routine owner's cached jobs live under — the same identity the
+ *  query key uses, so two sources that both call a profile "default" never
+ *  share a list. */
+export function routineOwnerKey(owner: RoutineOwner): string {
+  const bot = typeof owner === 'string' ? { name: owner } : owner
+
+  return botConnectionRoute(bot) ? botRosterKey(bot) : bot?.name || ''
+}
+
+export function lastJobsFor(owner: RoutineOwner): RoutineJob[] {
+  return $lastJobsByOwner.get()[routineOwnerKey(owner)] ?? []
+}
+
+export function rememberJobsFor(owner: RoutineOwner, jobs: RoutineJob[]): void {
+  const key = routineOwnerKey(owner)
+
+  if (key && $lastJobsByOwner.get()[key] !== jobs) {
+    $lastJobsByOwner.set({ ...$lastJobsByOwner.get(), [key]: jobs })
+  }
+}
 
 function showsHandle(name: string, meta: BotMeta | null | undefined, bot?: RosterRow | null) {
   const display = displayName(
@@ -543,8 +566,8 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
       // ellipsized (#91623). The chain has to be unbroken — one `auto` in it
       // re-pins the whole row.
       className={cn(
-        'group grid min-w-0 gap-1.5 rounded-lg border border-(--ui-stroke-secondary) p-2.5 transition-colors',
-        'hover:border-(--ui-stroke-primary, var(--ui-stroke-secondary))'
+        'group grid min-w-0 gap-1 rounded-lg px-2 py-2 transition-colors duration-100 hover:transition-none',
+        'hover:bg-(--ui-row-hover-background) focus-within:bg-(--ui-row-hover-background)'
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -574,7 +597,7 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
         <Tip label={t.common.delete}>
           <Button
             aria-label={t.common.delete}
-            className="opacity-0 transition-opacity group-hover:opacity-100"
+            className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
             disabled={busy}
             onClick={() => act('remove')}
             size="icon-xs"
@@ -1240,10 +1263,10 @@ export function RoutinesPane() {
     return <PanelEmpty description={b.cron.needsRosterFirst} icon="hubot" title={c.title} />
   }
 
-  const view = selectRoutineJobs(data, error, $lastJobs.get(), bot)
+  const view = selectRoutineJobs(data, error, lastJobsFor(owner), bot)
 
   if (view.live) {
-    $lastJobs.set(view.live)
+    rememberJobsFor(owner, view.live)
   }
 
   const jobs = view.jobs
@@ -1258,11 +1281,11 @@ export function RoutinesPane() {
       <div className="px-3 pt-3">
         <ScreenHero bot={owner} meta={meta} />
       </div>
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+      <div className="flex items-center gap-2.5 px-3 pt-3 pb-3" data-slot="routines-owner">
         <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={22} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-1.5 truncate">
-            <div className="truncate text-xs font-semibold">
+            <div className="truncate text-[0.8125rem] font-medium text-(--ui-text-primary)">
               {displayName(
                 {
                   name: bot
@@ -1274,7 +1297,7 @@ export function RoutinesPane() {
               <span className="shrink-0 font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
             ) : null}
           </div>
-          <div className="text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>
+          <div className="text-[0.625rem] uppercase tracking-[0.08em] text-(--ui-text-quaternary)">{c.title}</div>
         </div>
         <Tip label={c.newCron}>
           <Button aria-label={c.newCron} onClick={openCreate} size="icon-xs" variant="ghost">
@@ -1282,7 +1305,7 @@ export function RoutinesPane() {
           </Button>
         </Tip>
       </div>
-      <div className="mx-3 border-t border-(--ui-stroke-secondary)" />
+      <div className="mx-3 border-t border-(--ui-stroke-tertiary)" />
       {staleNotice ? (
         <div className="mx-3 mt-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
           {staleNotice}
@@ -1318,7 +1341,7 @@ export function RoutinesPane() {
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid gap-1.5 px-2.5 py-2">
+          <div className="grid gap-0.5 px-1.5 py-2">
             {jobs.map(job => (
               <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={owner} />
             ))}

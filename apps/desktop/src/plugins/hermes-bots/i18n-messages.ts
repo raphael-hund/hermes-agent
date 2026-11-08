@@ -78,6 +78,8 @@ export type BotsMessages = {
     createdOn: (name: string, target: string) => string
   }
   roster: {
+    /** Product name under the brand mark atop the roster. */
+    brand: string
     search: string
     searchPlaceholder: string
     newBotOrGroup: string

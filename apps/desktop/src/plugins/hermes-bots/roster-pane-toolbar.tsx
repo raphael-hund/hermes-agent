@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  HermesMark,
   SearchField,
   Tip
 } from '@hermes/plugin-sdk'
@@ -104,11 +105,13 @@ export function renderRosterToolbar({
 }: renderRosterToolbarProps) {
   return (
     <>
-      <div className="flex items-center justify-between gap-2 px-2.5 pt-2.5 pb-1.5">
-        <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)">
-          Bots
-        </span>
-        <div className="flex items-center gap-0.5">
+      {/* Brand header: the small ghost and the product name, centered, with
+          the two roster actions tucked into the corner so the column opens on
+          identity rather than on controls. */}
+      <div className="relative flex flex-col items-center gap-2 px-2.5 pt-6 pb-4" data-slot="roster-brand">
+        <HermesMark size={64} />
+        <span className="text-[0.875rem] font-medium text-(--ui-text-secondary)">{b.roster.brand}</span>
+        <div className="absolute top-2 right-2 flex items-center gap-0.5">
           <Tip
             label={activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable'}
           >
