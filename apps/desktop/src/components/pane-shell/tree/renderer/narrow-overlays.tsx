@@ -29,7 +29,7 @@ import { allPaneIds, findGroupOfPane, type LayoutNode } from '../model'
 import { $earlyFoldViewport, $hiddenTreePanes, $layoutTree, $narrowViewport } from '../store'
 
 import { KeepAlivePaneSlot, useStablePaneHosts } from './keep-alive-panes'
-import { fixedTrackSize, paneChrome, paneFolded, type TrackContext } from './track-model'
+import { fixedTrackSize, overlaySide, paneChrome, paneFolded, type TrackContext } from './track-model'
 
 /** The width a revealed narrow overlay sizes itself to: the SAME resolution
  *  the pane's zone uses while docked — declared max() refined by the live
@@ -173,7 +173,7 @@ export function NarrowOverlays() {
     }
   }, [narrow, solo])
 
-  const sideOf = (c: Contribution) => (paneChrome(c).placement === 'left' ? 'left' : 'right')
+  const sideOf = overlaySide
   const revealed = reveal ? collapsibles.find(p => p.id === reveal.id) : undefined
   const sides = [...new Set(collapsibles.map(sideOf))]
 

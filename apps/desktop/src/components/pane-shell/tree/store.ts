@@ -7,6 +7,7 @@
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
 import { EARLY_FOLD_MEDIA_QUERY, SIDEBAR_COLLAPSE_MEDIA_QUERY } from '@/app/layout-constants'
+import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { setPluginEnabled } from '@/contrib/plugins-store'
 import { registry } from '@/contrib/registry'
 import { translateNow } from '@/i18n'
@@ -48,7 +49,7 @@ import {
 import { isTreePaneParked } from './parked-panes'
 import { FLOATING_PLACEMENT } from './renderer/floating-rect'
 import { tabStripVisibleForZone } from './renderer/strip-visibility'
-import { paneFolded } from './renderer/track-model'
+import { overlaySide, paneChrome, paneFolded } from './renderer/track-model'
 
 // v2: v1 trees were saved against placeholder panes with index-order zone
 // assignment (chat could land in a corner cell). Retire them wholesale.
@@ -1282,6 +1283,43 @@ export function revealTreePane(paneId: string) {
       commit(next)
     }
   }
+
+  // A folded pane has no grid slot to show it in: the explicit reveal opens
+  // its edge overlay instead, or a native/palette reveal would stay invisible.
+  if (foldedPaneOnSide(overlaySide(paneContribution(paneId)), paneId) === paneId) {
+    window.dispatchEvent(new CustomEvent(PANE_TOGGLE_REVEAL_EVENT, { detail: { id: paneId, mode: 'open' } }))
+  }
+}
+
+const paneContribution = (paneId: string) => registry.getArea('panes').find(c => c.id === paneId)
+
+/**
+ * A pane folded out of the grid at the current width on `side`, still in the
+ * tree and not hidden, so its edge overlay can show it. `prefer` (a pane id or
+ * one of its reveal aliases) wins when it is among them; otherwise the first
+ * folded pane on that side. Null when nothing on that side is folded.
+ */
+export function foldedPaneOnSide(side: 'left' | 'right', prefer?: string): null | string {
+  const tree = $layoutTree.get()
+
+  if (!tree || typeof window === 'undefined') {
+    return null
+  }
+
+  const inTree = new Set(allPaneIds(tree))
+  const hidden = $hiddenTreePanes.get()
+  const narrow = $narrowViewport.get()
+  const early = $earlyFoldViewport.get()
+
+  const folded = registry
+    .getArea('panes')
+    .filter(c => inTree.has(c.id) && !hidden.has(c.id) && paneFolded(c, narrow, early) && overlaySide(c) === side)
+
+  const preferred = prefer
+    ? folded.find(c => c.id === prefer || paneChrome(c).revealAliases?.includes(prefer))
+    : undefined
+
+  return (preferred ?? folded[0])?.id ?? null
 }
 
 /**
@@ -1987,6 +2025,31 @@ export function isPaneVisible(paneId: string): boolean {
   const side = treeSideOfPane(paneId)
 
   return Boolean(group && !group.minimized && group.active === paneId && !(side && $collapsedTreeSides.get().has(side)))
+}
+
+/** Is `paneId` its zone's chosen tab, whether or not the zone is on screen
+ *  right now? Unlike `isPaneVisible` this ignores a minimized zone, a closed
+ *  side and a width fold: closing or folding a column is not leaving the tab. */
+export function isPaneSelected(paneId: string): boolean {
+  if ($dismissedPanes.get().has(paneId) || $hiddenTreePanes.get().has(paneId)) {
+    return false
+  }
+
+  return paneGroup(paneId)?.active === paneId
+}
+
+const paneSelectedCache = new Map<string, ReadableAtom<boolean>>()
+
+/** Reactive `isPaneSelected`, memoized per pane id like `$paneVisible`. */
+export function $paneSelected(paneId: string): ReadableAtom<boolean> {
+  let cached = paneSelectedCache.get(paneId)
+
+  if (!cached) {
+    cached = computed([$layoutTree, $dismissedPanes, $hiddenTreePanes], () => isPaneSelected(paneId))
+    paneSelectedCache.set(paneId, cached)
+  }
+
+  return cached
 }
 
 const paneVisibleCache = new Map<string, ReadableAtom<boolean>>()

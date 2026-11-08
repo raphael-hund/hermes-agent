@@ -17,7 +17,7 @@
  */
 
 import type * as HermesSdk from '@hermes/plugin-sdk'
-import type { PluginContext } from '@hermes/plugin-sdk'
+import { host, type PluginContext } from '@hermes/plugin-sdk'
 import { atom } from 'nanostores'
 import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -47,6 +47,8 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
       ...original.host,
       onEvent: undefined,
       paneVisibility: mocks.paneVisibility,
+      // These cases drive the visibility fallback; selection has its own test.
+      paneSelection: undefined,
       setWorkspaceScope: mocks.setWorkspaceScope,
       undismissPane: mocks.undismissPane
     }
@@ -341,5 +343,35 @@ describe('a desktop without host.paneVisibility', () => {
 
     harness.dispose()
     host.paneVisibility = restore
+  })
+})
+
+describe('Bot Mode follows the Bots tab, not the column pixels', () => {
+  it('keeps the jobs pane registered while the profile column is closed or folded', async () => {
+    const store = paneStores()
+    const selected = atom(true)
+    const harness = recordingContext()
+    const restore = host.paneSelection
+
+    host.paneSelection = vi.fn(() => selected) as typeof host.paneSelection
+    mocks.botChatOwnsWorkspace.mockReturnValue(true)
+
+    try {
+      plugin.register(harness.ctx)
+      await settle()
+      expect(harness.find('routines')).toBeTruthy()
+
+      // A narrow window folds the column: visibility drops, the tab stays chosen.
+      store('hermes-bots:pane').set(false)
+      expect(harness.find('routines')).toBeTruthy()
+
+      // Picking the Sessions tab is leaving Bot Mode.
+      mocks.botChatOwnsWorkspace.mockReturnValue(false)
+      selected.set(false)
+      expect(harness.find('routines')).toBeUndefined()
+    } finally {
+      host.paneSelection = restore
+      harness.dispose()
+    }
   })
 })

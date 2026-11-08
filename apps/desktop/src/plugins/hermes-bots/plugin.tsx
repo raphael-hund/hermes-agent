@@ -546,7 +546,14 @@ export default {
 
     if (typeof host.paneVisibility === 'function') {
       // The contribution-scoped pane id (`register` prefixes `${ID}:`).
-      const $sidebarVisible = host.paneVisibility(`${ID}:pane`)
+      // Bot Mode follows the Bots TAB, not the column's pixels: closing the
+      // profile column or folding it on a narrow window keeps the jobs column
+      // registered and reachable. Older hosts fall back to visibility.
+      const $sidebarVisible =
+        typeof host.paneSelection === 'function'
+          ? host.paneSelection(`${ID}:pane`)
+          : host.paneVisibility(`${ID}:pane`)
+
       let unregisterRoutines: null | (() => void) = null
       // Armed by each Bots-tab entry, spent by the first registration after it.
       let restoreDismissedOnRegister = true

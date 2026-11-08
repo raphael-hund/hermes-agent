@@ -146,6 +146,10 @@ export const paneChrome = (c: Contribution | undefined) => (c?.data ?? {}) as Pa
 /** Does this pane leave the grid for an edge overlay at the current width?
  *  `narrow` is the dock floor (every collapsible pane folds), `early` the
  *  wider fold point (only `foldsEarly` panes fold). */
+/** The edge a folded pane's overlay slides in from. */
+export const overlaySide = (c: Contribution | undefined): 'left' | 'right' =>
+  paneChrome(c).placement === 'left' ? 'left' : 'right'
+
 export function paneFolded(c: Contribution | undefined, narrow: boolean, early: boolean): boolean {
   const chrome = paneChrome(c)
 

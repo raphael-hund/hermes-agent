@@ -5,8 +5,10 @@ import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { allPaneIds, type GroupNode } from '@/components/pane-shell/tree/model'
 import {
   $collapsedTreeSides,
+  $earlyFoldViewport,
   $hiddenTreePanes,
   $layoutTree,
+  foldedPaneOnSide,
   layoutHasRootSide,
   paneRootSide,
   restoreHiddenTreeSideTabs,
@@ -566,12 +568,31 @@ export function setSidebarWidth(width: number) {
 // docked `open` flag renders a 0px track invisibly. Centralised here so every
 // caller (titlebar, keybinds, session-search, reveal-file) inherits it instead
 // of re-deriving the narrow branch. Returns true when it handled the intent.
-function revealNarrowPane(id: string, mode: 'close' | 'open' | 'toggle'): boolean {
-  if (typeof window === 'undefined' || !matchesQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)) {
+//
+// The overlay opens whatever pane actually folded on that edge: `id` when it
+// is one of them, otherwise the edge's first folded pane (Bot Mode's jobs
+// column on the right, while the file tree rests closed). Between the dock
+// floor and the early fold point only `foldsEarly` panes are folded, so the
+// edge reveals one only while its docked column is closed — an open docked
+// column keeps its own toggle.
+function revealNarrowPane(
+  id: string,
+  mode: 'close' | 'open' | 'toggle',
+  side: TreeSide,
+  dockedOpen: () => boolean = () => false
+): boolean {
+  if (typeof window === 'undefined') {
     return false
   }
 
-  window.dispatchEvent(new CustomEvent(PANE_TOGGLE_REVEAL_EVENT, { detail: { id, mode } }))
+  const narrow = matchesQuery(SIDEBAR_COLLAPSE_MEDIA_QUERY)
+  const folded = foldedPaneOnSide(side, id)
+
+  if (!narrow && (!$earlyFoldViewport.get() || !folded || dockedOpen())) {
+    return false
+  }
+
+  window.dispatchEvent(new CustomEvent(PANE_TOGGLE_REVEAL_EVENT, { detail: { id: folded ?? id, mode } }))
 
   return true
 }
@@ -591,11 +612,11 @@ export function setSidebarOpen(open: boolean) {
     restoreHiddenTreeSideTabs(sidebarSide())
   }
 
-  revealNarrowPane(CHAT_SIDEBAR_PANE_ID, open ? 'open' : 'close')
+  revealNarrowPane(CHAT_SIDEBAR_PANE_ID, open ? 'open' : 'close', sidebarSide())
 }
 
 export function toggleSidebarOpen() {
-  if (!revealNarrowPane(CHAT_SIDEBAR_PANE_ID, 'toggle')) {
+  if (!revealNarrowPane(CHAT_SIDEBAR_PANE_ID, 'toggle', sidebarSide(), () => $sidebarOpen.get())) {
     const open = restoreMinimizedTreeSide(sidebarSide()) || !$sidebarOpen.get()
     setPaneOpen(CHAT_SIDEBAR_PANE_ID, open)
     setTreeSideCollapsed(sidebarSide(), !open)
@@ -611,7 +632,7 @@ export function toggleSidebarOpen() {
 // side: the outermost root-row column left of main, then fold/unfold it
 // through the tree's zone minimize (round-trips like the zone chevron).
 export function toggleLeftSide() {
-  if (revealNarrowPane(CHAT_SIDEBAR_PANE_ID, 'toggle')) {
+  if (revealNarrowPane(CHAT_SIDEBAR_PANE_ID, 'toggle', 'left', () => $leftSideOpen.get())) {
     return
   }
 
@@ -653,7 +674,7 @@ export function layoutHasLeftSide(): boolean {
 }
 
 export function toggleFileBrowserOpen() {
-  if (revealNarrowPane(FILE_BROWSER_PANE_ID, 'toggle')) {
+  if (revealNarrowPane(FILE_BROWSER_PANE_ID, 'toggle', fileBrowserSide(), () => $fileBrowserOpen.get())) {
     return
   }
 
@@ -672,7 +693,7 @@ export function setFileBrowserOpen(open: boolean) {
     restoreHiddenTreeSideTabs(fileBrowserSide())
   }
 
-  revealNarrowPane(FILE_BROWSER_PANE_ID, open ? 'open' : 'close')
+  revealNarrowPane(FILE_BROWSER_PANE_ID, open ? 'open' : 'close', fileBrowserSide(), () => open)
 }
 
 // POSITIONAL right-side toggle. The titlebar button and ⌘J promise
@@ -685,7 +706,7 @@ export function setFileBrowserOpen(open: boolean) {
 // minimize, which keeps its tab on a persistent rail so the toggle round-trips
 // exactly like the zone chevron.
 export function toggleRightSide() {
-  if (revealNarrowPane(FILE_BROWSER_PANE_ID, 'toggle')) {
+  if (revealNarrowPane(FILE_BROWSER_PANE_ID, 'toggle', 'right', () => $rightSideOpen.get())) {
     return
   }
 
@@ -790,6 +811,16 @@ function rightSideShown(group: GroupNode): boolean {
 
   return !group.minimized && !(side && $collapsedTreeSides.get().has(side)) && shownPanesInGroup(group).length > 0
 }
+
+// The positional RIGHT edge's docked open state, mirroring $leftSideOpen.
+export const $rightSideOpen: ReadableAtom<boolean> = computed(
+  [$layoutTree, $collapsedTreeSides, $hiddenTreePanes, $fileBrowserOpen],
+  () => {
+    const group = rightSideGroup()
+
+    return group ? rightSideShown(group) : $fileBrowserOpen.get()
+  }
+)
 
 // Is `paneId` a main surface (the workspace or a session/route tile)? Those
 // mark THE main column; preview tiles share `placement: 'main'` with them but

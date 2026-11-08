@@ -32,6 +32,11 @@ unverändert.
 - **Kleine Fenster:** Unter 960px faltet die Job-Spalte an den rechten Rand.
   Unter 640px faltet auch die linke Spalte. Beide öffnen sich als Overlay
   am Rand. Ab 960px bleiben 3 Spalten. Das Layout im Baum bleibt gleich.
+- **Gefaltete Jobs öffnen:** Drei Wege öffnen die gefaltete Job-Spalte bei
+  760px und 600px. Das sind der native Reveal der Pane, die rechte
+  Titelleisten-Taste und ⌘J. Die Palette nutzt denselben Reveal.
+- **Profilspalte zu:** Bot-Mode folgt dem gewählten Bots-Tab. Schliessen
+  oder Falten der Profilspalte entfernt die Jobs also nicht.
 
 ## Das bleibt unverändert
 
