@@ -45,7 +45,7 @@ import { $botMeta, $lastRoster, botHandle, botRosterKey, botSelectionKey, isActi
 import { labeled } from './dialog-parts'
 import { botsText, type BotsText, useBots } from './i18n'
 import { displayName } from './labels'
-import { botConnectionRoute, botRosterMeta, requestForBot } from './routing'
+import { botRosterMeta, requestForBot, resolveBotConnectionRoute } from './routing'
 import { ScreenHero } from './screen-hero'
 import { ID } from './shared'
 import type { BotMeta, RosterRow, RoutineJob } from './types'
@@ -57,13 +57,28 @@ const ROUTINES_KEY = [ID, 'routines']
  *  switch paint the previous profile's jobs under the new profile's header. */
 const $lastJobsByOwner = atom<Readonly<Record<string, RoutineJob[]>>>({})
 
-/** The key a routine owner's cached jobs live under — the same identity the
- *  query key uses, so two sources that both call a profile "default" never
- *  share a list. */
+/** The connection an UNSCOPED row's request actually reaches: the active
+ *  socket. Source-scoped rows carry their own route instead. */
+function activeConnectionId(): string {
+  return String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local')
+}
+
+/** The key a routine owner's query and cached jobs live under: connection +
+ *  profile, always. A source-scoped row names its own connection; an unscoped
+ *  row (e.g. a roster that fell back after an agents-list failure) is the
+ *  profile on the connection its request will actually reach. Two sources
+ *  that both call a profile "default" therefore never share a list. */
 export function routineOwnerKey(owner: RoutineOwner): string {
   const bot = typeof owner === 'string' ? { name: owner } : owner
+  const name = String(bot?.name || '').trim()
 
-  return botConnectionRoute(bot) ? botRosterKey(bot) : bot?.name || ''
+  if (!name) {
+    return ''
+  }
+
+  const route = resolveBotConnectionRoute(bot).route
+
+  return route ? botRosterKey(bot) : `${activeConnectionId()}::${name}`
 }
 
 export function lastJobsFor(owner: RoutineOwner): RoutineJob[] {
@@ -151,47 +166,10 @@ export async function loadRoutines(owner: RoutineOwner): Promise<RoutineListResu
     ...scope
   })) as RoutineListResult
 
-  const jobs = Array.isArray(data?.jobs) ? data.jobs : []
-
-  const activeLegacyJobs = jobs.filter(
-    job => isLegacyDelegatedRoutine(job) && job.enabled !== false && job.state !== 'paused'
-  )
-
-  // A pause failing must not fail the LIST — the pane would report "could
-  // not load cronjobs" over data that loaded fine, and the 20s poll would
-  // re-attempt the failing pause inside a failing query forever. Each pause
-  // swallows its own error; the overlay only claims jobs the gateway
-  // actually paused, and the next poll retries the rest.
-  const pauses = await Promise.all(
-    activeLegacyJobs.map(job =>
-      requestForBot(bot, 'cron.manage', {
-        action: 'pause',
-        name: job.job_id,
-        ...scope
-      })
-        .then(() => true)
-        .catch(() => false)
-    )
-  )
-
-  if (!activeLegacyJobs.length) {
-    return data
-  }
-
-  const pausedIds = new Set(activeLegacyJobs.filter((job, index) => pauses[index]).map(job => job.job_id))
-
-  return {
-    ...data,
-    jobs: jobs.map(job =>
-      pausedIds.has(job.job_id)
-        ? {
-            ...job,
-            enabled: false,
-            state: 'paused'
-          }
-        : job
-    )
-  }
+  // READ ONLY. The pane opens on its own (the Focus workspace seats it at
+  // launch), so this path must never change a job: legacy delegated routines
+  // are flagged in their row and paused or removed only by the user's click.
+  return data
 }
 
 function useRoutines(owner: RoutineOwner) {
@@ -202,13 +180,27 @@ function useRoutines(owner: RoutineOwner) {
         }
       : owner
 
-  const route = botConnectionRoute(bot)
-  const key = route ? botRosterKey(bot) : bot?.name || ''
+  // Resolve the owner's connection ONCE, before the request, and use that one
+  // identity for the query key, the request and the cached list.
+  useValue(host.state.connectionId)
+  const key = routineOwnerKey(bot)
+  const scoped = Boolean(resolveBotConnectionRoute(bot).route)
 
   return useQuery({
     queryKey: [...ROUTINES_KEY, key],
-    queryFn: () => loadRoutines(bot),
-    enabled: Boolean(bot?.name),
+    queryFn: async () => {
+      const data = await loadRoutines(bot)
+
+      // An unscoped row's request rides the ACTIVE socket. If that socket
+      // switched while the request ran, the answer belongs to another owner:
+      // refuse it rather than file it under this key.
+      if (!scoped && routineOwnerKey(bot) !== key) {
+        throw new Error('The connection changed while scheduled jobs were loading.')
+      }
+
+      return data
+    },
+    enabled: Boolean(key),
     refetchInterval: 20000,
     staleTime: 8000
   })
@@ -221,30 +213,25 @@ export function routineCreateTarget(owner: RoutineOwner, activeBot: string): Ros
 }
 
 export async function invalidateRoutineOwner(owner: RoutineOwner) {
-  const bot =
-    typeof owner === 'string'
-      ? {
-          name: owner
-        }
-      : owner
-
-  const route = botConnectionRoute(bot)
-  const key = route ? botRosterKey(bot) : bot?.name || ''
   await queryClient.invalidateQueries({
-    queryKey: [...ROUTINES_KEY, key],
+    queryKey: [...ROUTINES_KEY, routineOwnerKey(owner)],
     exact: true
   })
 }
 
-/** Pick which cron jobs to show. A failed refresh keeps the last good list. */
+/** Pick which cron jobs to show. Only an answer with no error is `live`.
+ *  React Query keeps the last successful `data` beside a refetch error, so a
+ *  failed refresh shows that owner's last list (or the owner-scoped cache) as
+ *  stale, and an earlier EMPTY answer is not re-confirmed by an outage. */
 export function selectRoutineJobs(
   data: RoutineListResult | undefined,
   error: unknown,
   lastJobs: RoutineJob[],
   bot: string
 ) {
-  const live = Array.isArray(data?.jobs) ? data.jobs : null
-  const all = live ?? (error ? lastJobs : [])
+  const answered = Array.isArray(data?.jobs) ? data.jobs : null
+  const live = error ? null : answered
+  const all = live ?? (error ? (answered ?? lastJobs) : [])
   const scopedToBot = normalizedProfileName(data?.scoped) === normalizedProfileName(bot)
 
   return {
@@ -520,7 +507,8 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
   // toggle so the switch responds even before the refetch lands.
   const [pendingActive, setPendingActive] = useState<boolean | null>(null)
   const legacyUnsafe = isLegacyDelegatedRoutine(job)
-  const serverActive = !legacyUnsafe && job.enabled !== false && job.state !== 'paused'
+  // The real server state, legacy or not: this pane never pauses on read.
+  const serverActive = job.enabled !== false && job.state !== 'paused'
   const active = pendingActive === null ? serverActive : pendingActive
 
   if (pendingActive !== null && pendingActive === serverActive) {
@@ -591,7 +579,9 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
         </RowButton>
         <Switch
           checked={active}
-          disabled={busy || legacyUnsafe}
+          // A legacy routine may be paused, never resumed: resuming would run
+          // its pre-hardening prompt again.
+          disabled={busy || (legacyUnsafe && !active)}
           onCheckedChange={value => act(value ? 'resume' : 'pause')}
         />
         <Tip label={t.common.delete}>
@@ -1315,7 +1305,7 @@ export function RoutinesPane() {
         <div className="flex flex-1 items-center justify-center">
           <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
         </div>
-      ) : error && !view.all.length ? (
+      ) : error && !jobs.length ? (
         <PanelEmpty
           action={
             <Button onClick={() => void refetch()} size="sm" variant="secondary">
@@ -1341,7 +1331,7 @@ export function RoutinesPane() {
         />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid gap-0.5 px-1.5 py-2">
+          <div className={cn('grid gap-0.5 px-1.5 py-2', staleNotice && 'opacity-60')} data-stale={staleNotice ? '' : undefined}>
             {jobs.map(job => (
               <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={owner} />
             ))}

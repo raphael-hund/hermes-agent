@@ -46,7 +46,7 @@ describe('cache eviction is scoped to one owner', () => {
   it('invalidates that owner\u2019s list and nothing else', async () => {
     await invalidateRoutineOwner('ops')
 
-    expect(invalidateQueries).toHaveBeenCalledWith({ exact: true, queryKey: ['hermes-bots', 'routines', 'ops'] })
+    expect(invalidateQueries).toHaveBeenCalledWith({ exact: true, queryKey: ['hermes-bots', 'routines', 'local::ops'] })
   })
 })
 
@@ -65,6 +65,6 @@ describe('a row mutation addresses the owner that rendered it', () => {
     await waitFor(() => expect(invalidateQueries).toHaveBeenCalled())
 
     expect(request).toHaveBeenCalledWith('cron.manage', { action: 'pause', name: 'digest', profile: 'ops' })
-    expect(invalidateQueries).toHaveBeenCalledWith({ exact: true, queryKey: ['hermes-bots', 'routines', 'ops'] })
+    expect(invalidateQueries).toHaveBeenCalledWith({ exact: true, queryKey: ['hermes-bots', 'routines', 'local::ops'] })
   })
 })

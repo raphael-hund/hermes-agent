@@ -134,18 +134,23 @@ describe('the row is reachable', () => {
     expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
   })
 
-  it('refuses to run a legacy delegated routine, and says why', () => {
-    const legacy: RoutineJob = {
-      ...activeJob,
-      prompt_preview: 'You are running the scheduled routine "Morning digest" for agent \'notetaker\'.'
-    }
+  it('shows a legacy routine in its real state: pausable, never resumable', () => {
+    const prompt = 'You are running the scheduled routine "Morning digest" for agent \'notetaker\'.'
+    const legacy: RoutineJob = { ...activeJob, prompt_preview: prompt }
+    const paused: RoutineJob = { ...legacy, enabled: false, state: 'paused' }
 
-    render(<RoutineRow job={legacy} onOpen={() => undefined} owner={{ name: 'notetaker' }} />)
+    // Reading never pauses it, so an active legacy job reads active and the
+    // user can pause it from here.
+    const { unmount } = render(<RoutineRow job={legacy} onOpen={() => undefined} owner={{ name: 'notetaker' }} />)
+    expect(screen.getByRole('switch')).toHaveProperty('disabled', false)
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText(/Old job format/)).toBeTruthy()
+    unmount()
 
-    // Its prompt was built by interpolation, so the switch stays locked until
-    // the user recreates the job through the hardened create path.
+    // Its prompt was built by interpolation: once paused it stays paused
+    // until the user recreates it through the hardened create path.
+    render(<RoutineRow job={paused} onOpen={() => undefined} owner={{ name: 'notetaker' }} />)
     expect(screen.getByRole('switch')).toHaveProperty('disabled', true)
-    expect(screen.getByText(/Paused for security/)).toBeTruthy()
   })
 
   it('labels a next run parked past the scheduler grace as overdue, never as "Next" (#114309)', () => {

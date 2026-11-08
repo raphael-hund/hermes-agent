@@ -4331,3 +4331,13 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
   text-transform: none;
   letter-spacing: 0;
 }
+
+/* Focus: small functional motion only — rows and the composer border ease
+   back on leave; reduced motion drops even that. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-hermes-theme='focus'] [data-slot='roster-brand'] *,
+  :root[data-hermes-theme='focus'] [data-roster-key],
+  :root[data-hermes-theme='focus'] [data-slot='composer-surface'] {
+    transition: none !important;
+  }
+}
