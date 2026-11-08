@@ -37,7 +37,7 @@ import {
   useQuery,
   useValue
 } from '@hermes/plugin-sdk'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { $focusedBotOwner, $selectedBot, focusedRosterOwner } from './bot-state'
@@ -57,28 +57,63 @@ const ROUTINES_KEY = [ID, 'routines']
  *  switch paint the previous profile's jobs under the new profile's header. */
 const $lastJobsByOwner = atom<Readonly<Record<string, RoutineJob[]>>>({})
 
-/** The connection an UNSCOPED row's request actually reaches: the active
- *  socket. Source-scoped rows carry their own route instead. */
+/** The connection the roster stamps an unscoped row with — exactly the rule
+ *  `data.ts` uses when it builds rows from the active socket (a desktop with
+ *  no connection registry is the local gateway). */
 function activeConnectionId(): string {
-  return String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local')
+  return String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local').trim()
 }
 
-/** The key a routine owner's query and cached jobs live under: connection +
- *  profile, always. A source-scoped row names its own connection; an unscoped
- *  row (e.g. a roster that fell back after an agents-list failure) is the
- *  profile on the connection its request will actually reach. Two sources
- *  that both call a profile "default" therefore never share a list. */
-export function routineOwnerKey(owner: RoutineOwner): string {
-  const bot = typeof owner === 'string' ? { name: owner } : owner
+/**
+ * Bind a routine owner to ONE connection before anything is requested.
+ *
+ * A source-scoped row already carries its own route. An unscoped row (e.g. a
+ * roster that fell back after an agents-list failure) would otherwise ride
+ * whatever socket is active when the request finally runs — a connection
+ * switch mid-flight then filed one gateway's jobs under another's key. Here
+ * it gets a real `ProfileRoute` for the connection that is active NOW, so
+ * `requestForBot` dispatches through `host.requestProfile` to that exact
+ * connection, and the query key, cache and mutations all read the same
+ * identity. No connection to name → null: the column waits instead of
+ * guessing.
+ */
+export function pinRoutineOwner(owner: RoutineOwner): null | RosterRow {
+  const bot: RosterRow | null = typeof owner === 'string' ? { name: owner } : owner || null
   const name = String(bot?.name || '').trim()
 
-  if (!name) {
-    return ''
+  if (!bot || !name) {
+    return null
   }
 
-  const route = resolveBotConnectionRoute(bot).route
+  const resolved = resolveBotConnectionRoute(bot)
 
-  return route ? botRosterKey(bot) : `${activeConnectionId()}::${name}`
+  if (resolved.route) {
+    return bot
+  }
+
+  if (resolved.status === 'owner_removed') {
+    return null
+  }
+
+  const connectionId = activeConnectionId()
+
+  const route = Object.freeze({
+    connectionId,
+    mode: connectionId === 'local' ? ('local' as const) : ('remote' as const),
+    profile: name,
+    targetProfile: String(bot.targetProfile || name).trim() || name
+  })
+
+  return { ...bot, connectionId, route, sourceScoped: true }
+}
+
+/** The key a routine owner's query and cached jobs live under: the pinned
+ *  route's connection + profile. Two sources that both call a profile
+ *  "default" therefore never share a list. Empty when the owner is unproven. */
+export function routineOwnerKey(owner: RoutineOwner): string {
+  const pinned = pinRoutineOwner(owner)
+
+  return pinned ? botRosterKey(pinned) : ''
 }
 
 export function lastJobsFor(owner: RoutineOwner): RoutineJob[] {
@@ -172,43 +207,32 @@ export async function loadRoutines(owner: RoutineOwner): Promise<RoutineListResu
   return data
 }
 
-function useRoutines(owner: RoutineOwner) {
-  const bot =
-    typeof owner === 'string'
-      ? {
-          name: owner
-        }
-      : owner
-
-  // Resolve the owner's connection ONCE, before the request, and use that one
-  // identity for the query key, the request and the cached list.
-  useValue(host.state.connectionId)
-  const key = routineOwnerKey(bot)
-  const scoped = Boolean(resolveBotConnectionRoute(bot).route)
-
-  return useQuery({
-    queryKey: [...ROUTINES_KEY, key],
-    queryFn: async () => {
-      const data = await loadRoutines(bot)
-
-      // An unscoped row's request rides the ACTIVE socket. If that socket
-      // switched while the request ran, the answer belongs to another owner:
-      // refuse it rather than file it under this key.
-      if (!scoped && routineOwnerKey(bot) !== key) {
-        throw new Error('The connection changed while scheduled jobs were loading.')
+/** The routine list query for one PINNED owner. Key and request read the
+ *  same captured route, so a later socket switch can neither redirect the
+ *  request nor re-label its answer. */
+export function routineQueryOptions(pinned: null | RosterRow) {
+  return {
+    queryKey: [...ROUTINES_KEY, pinned ? botRosterKey(pinned) : ''],
+    queryFn: () => {
+      if (!pinned || !resolveBotConnectionRoute(pinned).route) {
+        throw new Error('Scheduled jobs need a known connection.')
       }
 
-      return data
+      return loadRoutines(pinned)
     },
-    enabled: Boolean(key),
+    enabled: Boolean(pinned),
     refetchInterval: 20000,
     staleTime: 8000
-  })
+  }
+}
+
+function useRoutines(pinned: null | RosterRow) {
+  return useQuery(routineQueryOptions(pinned))
 }
 
 /** `activeBot` is always a non-empty profile name, so the result is never
  *  nullish even when no create-owner has been captured yet. */
-export function routineCreateTarget(owner: RoutineOwner, activeBot: string): RosterRow | string {
+export function routineCreateTarget(owner: RoutineOwner, activeBot: RosterRow | string): RosterRow | string {
   return owner || activeBot
 }
 
@@ -1228,7 +1252,12 @@ export function RoutinesPane() {
   const allMeta = useValue($botMeta)
   const meta = owner ? botRosterMeta(owner, allMeta) : null
   const { shape, color, image } = botAppearance(bot, meta)
-  const { data, error, isLoading, refetch } = useRoutines(owner)
+  const connectionId = useValue(host.state.connectionId)
+  // One captured identity per (owner row, active connection): every request,
+  // cache write, row mutation and create below goes to THIS route.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- connectionId re-pins an unscoped owner
+  const pinned = useMemo(() => pinRoutineOwner(owner), [owner, connectionId])
+  const { data, error, isLoading, refetch } = useRoutines(pinned)
   const b = useBots()
   const { t } = useI18n()
   const c = t.cron
@@ -1238,25 +1267,27 @@ export function RoutinesPane() {
   // an open inspector must follow the live row (next run, pause, last error)
   // instead of freezing the snapshot that was on screen when it opened.
   const [detailJobId, setDetailJobId] = useState<null | string>(null)
-  const createTarget = owner ? routineCreateTarget(createOwner, bot) : null
+  const createTarget = pinned ? routineCreateTarget(createOwner, pinned) : null
 
   const openCreate = () => {
-    if (!owner) {
+    if (!pinned) {
       return
     }
 
-    setCreateOwner(owner)
+    // The dialog keeps the pinned route it opened with: a submit after a
+    // connection switch still creates on the owner the user was looking at.
+    setCreateOwner(pinned)
     setCreateOpen(true)
   }
 
-  if (!owner) {
+  if (!owner || !pinned) {
     return <PanelEmpty description={b.cron.needsRosterFirst} icon="hubot" title={c.title} />
   }
 
-  const view = selectRoutineJobs(data, error, lastJobsFor(owner), bot)
+  const view = selectRoutineJobs(data, error, lastJobsFor(pinned), bot)
 
   if (view.live) {
-    rememberJobsFor(owner, view.live)
+    rememberJobsFor(pinned, view.live)
   }
 
   const jobs = view.jobs
@@ -1333,7 +1364,7 @@ export function RoutinesPane() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <div className={cn('grid gap-0.5 px-1.5 py-2', staleNotice && 'opacity-60')} data-stale={staleNotice ? '' : undefined}>
             {jobs.map(job => (
-              <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={owner} />
+              <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={pinned} />
             ))}
           </div>
         </div>
@@ -1343,10 +1374,9 @@ export function RoutinesPane() {
         // Non-null past the `!owner` early return above: `routineCreateTarget`
         // falls back to the active profile name.
         bot={createTarget!}
-        // TODO(bot-mode-types): `createTarget` is a roster row whenever a create
-        // owner is set, so this key stringifies to "[object Object]" instead of
-        // identifying the target bot. Cast to keep the as-written behavior.
-        key={createTarget as string}
+        // Keyed by the pinned owner identity, so a dialog for one connection
+        // never carries its form state over to another.
+        key={routineOwnerKey(createTarget)}
         onClose={() => {
           setCreateOpen(false)
           setCreateOwner(null)
